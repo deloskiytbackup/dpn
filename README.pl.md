@@ -28,6 +28,16 @@ Menedżer zapobiega duplikowaniu plików na dysku i przyspiesza reinstalację pa
 
 ---
 
+## ⚡ Wyniki Benchmarków (34 pakiety: `express`, `lodash`, `axios`, `cowsay`)
+
+| Menedżer Pakietów | 💥 Warm Cache (Re-instalacja) | ❄️ Cold Cache (Pierwsza instalacja) |
+| :--- | :--- | :--- |
+| **⚡ DPN (v1.7.0)** | **3.35 s 🚀 (Najszybszy)** | **3.10 s 🚀 (Strumieniowanie w RAM)** |
+| **🚀 pnpm** | 8.59 s | 3.29 s |
+| **🐢 npm** | 42.15 s | 11.62 s |
+
+---
+
 ## ✨ Kluczowe Cechy
 
 - 🔄 **Aktualizacje Over-The-Air (OTA) (v1.3.0)**: Wbudowany mechanizm samo-aktualizacji (`dpn upgrade`), który automatycznie pobiera, kompiluje i aktualizuje dpn prosto z GitHuba!

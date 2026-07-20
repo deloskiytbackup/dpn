@@ -1,6 +1,6 @@
 {
   "name": "dpn",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Direct Package Node - Fast, symlink-based package manager",
   "type": "module",
   "bin": {
