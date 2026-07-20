@@ -26,42 +26,61 @@ export interface NpmPackageMetadata {
 const metadataCache = new Map<string, NpmPackageMetadata>();
 const REGISTRY_URL = 'https://registry.npmjs.org';
 
-export async function fetchPackageMetadata(packageName: string): Promise<NpmPackageMetadata> {
+export async function fetchPackageMetadata(packageName: string, retries = 3): Promise<NpmPackageMetadata> {
   if (metadataCache.has(packageName)) {
     return metadataCache.get(packageName)!;
   }
 
-  // Handle scoped packages: @foo/bar -> %2F
   const encodedName = packageName.startsWith('@')
     ? `@${encodeURIComponent(packageName.slice(1))}`
     : encodeURIComponent(packageName);
 
   const url = `${REGISTRY_URL}/${encodedName}`;
-  const response = await fetch(url, {
-    headers: {
-      Accept: 'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*'
-    }
-  });
 
-  if (!response.ok) {
-    throw new Error(`Nie udało się pobrać metadanych dla pakietu "${packageName}": HTTP ${response.status} ${response.statusText}`);
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Accept: 'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as NpmPackageMetadata;
+      metadataCache.set(packageName, data);
+      return data;
+    } catch (err: any) {
+      if (attempt === retries) {
+        throw new Error(`Nie udało się pobrać metadanych dla "${packageName}": ${err.message}`);
+      }
+      await new Promise(r => setTimeout(r, 400 * attempt));
+    }
   }
 
-  const data = (await response.json()) as NpmPackageMetadata;
-  metadataCache.set(packageName, data);
-  return data;
+  throw new Error(`Nie udało się pobrać metadanych dla "${packageName}"`);
 }
 
-export async function downloadTarball(tarballUrl: string, destPath: string): Promise<void> {
-  const response = await fetch(tarballUrl);
-  if (!response.ok || !response.body) {
-    throw new Error(`Błąd podczas pobierania archiwum z ${tarballUrl}: HTTP ${response.status}`);
-  }
+export async function downloadTarball(tarballUrl: string, destPath: string, retries = 3): Promise<void> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(tarballUrl);
+      if (!response.ok || !response.body) {
+        throw new Error(`HTTP ${response.status}`);
+      }
 
-  await fs.promises.mkdir(path.dirname(destPath), { recursive: true });
-  const fileStream = fs.createWriteStream(destPath);
-  
-  // Convert web ReadableStream to Node Readable
-  const nodeStream = Readable.fromWeb(response.body as any);
-  await finished(nodeStream.pipe(fileStream));
+      await fs.promises.mkdir(path.dirname(destPath), { recursive: true });
+      const fileStream = fs.createWriteStream(destPath);
+      const nodeStream = Readable.fromWeb(response.body as any);
+      await finished(nodeStream.pipe(fileStream));
+      return;
+    } catch (err: any) {
+      if (attempt === retries) {
+        throw new Error(`Błąd pobierania archiwum z ${tarballUrl}: ${err.message}`);
+      }
+      await new Promise(r => setTimeout(r, 500 * attempt));
+    }
+  }
 }
