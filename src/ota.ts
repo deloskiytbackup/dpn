@@ -4,11 +4,19 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import semver from 'semver';
 
-export async function checkRemoteVersion(): Promise<string | null> {
-  const url = `https://raw.githubusercontent.com/deloskiytbackup/dpn/main/package.json?t=${Date.now()}`;
+const GITHUB_API_URL = 'https://api.github.com/repos/deloskiytbackup/dpn/contents/package.json';
 
+export async function checkRemoteVersion(): Promise<string | null> {
   return new Promise((resolve) => {
-    const req = https.get(url, { timeout: 2000 }, (res) => {
+    const options = {
+      headers: {
+        'User-Agent': 'dpn-cli-ota',
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      timeout: 2500
+    };
+
+    const req = https.get(GITHUB_API_URL, options, (res) => {
       if (res.statusCode !== 200) {
         resolve(null);
         return;
@@ -17,8 +25,14 @@ export async function checkRemoteVersion(): Promise<string | null> {
       res.on('data', chunk => body += chunk);
       res.on('end', () => {
         try {
-          const pkg = JSON.parse(body);
-          resolve(pkg.version || null);
+          const json = JSON.parse(body);
+          if (json.content) {
+            const decoded = Buffer.from(json.content, 'base64').toString('utf-8');
+            const pkg = JSON.parse(decoded);
+            resolve(pkg.version || null);
+          } else {
+            resolve(null);
+          }
         } catch {
           resolve(null);
         }
@@ -42,7 +56,6 @@ export async function handleSelfUpgrade(currentVersion: string) {
     return;
   }
 
-  // Porównujemy semwerowo, czy nowa wersja z GitHuba jest większa od aktualnej
   if (!semver.gt(remoteVersion, currentVersion)) {
     console.log(`✅ [dpn OTA] Posiadasz już najnowszą wersję dpn v${currentVersion}!`);
     return;
