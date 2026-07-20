@@ -4,12 +4,12 @@ import { resolveDependencies } from './resolver.js';
 import { ensurePackagesInStoreParallel } from './store.js';
 import { linkPackages } from './linker.js';
 import { runScript } from './runner.js';
-import { ProgressBar } from './ui.js';
+import { ProgressBar, Spinner } from './ui.js';
 import { readLockfile, writeLockfile, reconstructTreeFromLockfile } from './lockfile.js';
 import { handleSelfUpgrade, checkRemoteVersion, printUpdateNotice } from './ota.js';
 import { fetchPackageMetadata } from './registry.js';
 
-const VERSION = '1.7.0';
+const VERSION = '1.9.0';
 
 async function handleInit(projectDir: string) {
   const pkgPath = path.join(projectDir, 'package.json');
@@ -62,25 +62,27 @@ async function handleInstall(projectDir: string, forceRefresh: boolean = false) 
   let rootResolved;
 
   const existingLock = !forceRefresh ? await readLockfile(projectDir) : null;
-  
   const isLockValid = existingLock && Object.keys(rootDeps).every(name => existingLock.rootResolved[name]);
 
+  const resolveSpinner = new Spinner(`Rozwiązywanie drzewa zależności dla ${depCount} pakietów w NPM...`);
+  resolveSpinner.start();
+
   if (isLockValid && existingLock) {
-    console.log('[dpn] Używanie pliku blokady (dpn-lock.json)...');
+    resolveSpinner.stop(`Wczytano gotowe drzewo zależności z pliku blokady (dpn-lock.json)`);
     const reconstructed = reconstructTreeFromLockfile(existingLock);
     tree = reconstructed.tree;
     rootResolved = reconstructed.rootResolved;
   } else {
-    console.log(`[dpn] Rozwiązywanie zależności dla ${depCount} pakietów nadrzędnych...`);
     const resolved = await resolveDependencies(rootDeps);
     tree = resolved.tree;
     rootResolved = resolved.rootResolved;
+    resolveSpinner.stop(`Rozwiązano strukturę ${Object.keys(rootResolved).length} zależności w rejestrze NPM`);
 
     await writeLockfile(projectDir, tree, rootResolved);
   }
 
   const packages = Array.from(tree.values());
-  console.log(`[dpn] Znaleziono łącznie ${packages.length} unikalnych pakietów (z pod-zależnościami).\n`);
+  console.log(`[dpn] Łącznie do przetworzenia: ${packages.length} unikalnych pakietów.\n`);
 
   const progressBar = new ProgressBar(packages.length);
 
@@ -88,12 +90,15 @@ async function handleInstall(projectDir: string, forceRefresh: boolean = false) 
     progressBar.update(completed, `Pobieranie ${pkg.name}@${pkg.version}`);
   });
 
-  progressBar.finish();
+  progressBar.finish(`Pobrano i zweryfikowano ${packages.length} pakietów w magazynie`);
 
+  const linkSpinner = new Spinner(`Tworzenie dowiązań symlink i wrapperów wykonywalnych...`);
+  linkSpinner.start();
   await linkPackages(tree, rootResolved, projectDir);
+  linkSpinner.stop(`Połączono ${packages.length} pakietów w katalogu node_modules`);
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-  console.log(`✨ [dpn] Sukces! Zainstalowano i połączono ${packages.length} pakietów w ${duration}s.`);
+  console.log(`\n✨ [dpn] Sukces! Zakończono instalację w ${duration}s.`);
 }
 
 async function handleAdd(args: string[], projectDir: string) {
@@ -147,12 +152,14 @@ async function handleAdd(args: string[], projectDir: string) {
       }
     }
 
-    console.log(`[dpn] Dodawanie pakietu ${name}@${range} do ${section}...`);
+    const addSpinner = new Spinner(`Dodawanie pakietu ${name}@${range} do ${section}...`);
+    addSpinner.start();
     const { rootResolved } = await resolveDependencies({ [name]: range });
     const resolvedVersion = rootResolved[name] || range;
     const cleanVersion = resolvedVersion.replace(/[\^~]/, '');
 
     pkgJson[section][name] = (isExact || customVersion) ? cleanVersion : `^${cleanVersion}`;
+    addSpinner.stop(`Zapisano ${name}@${pkgJson[section][name]} w ${section}`);
   }
 
   await fs.promises.writeFile(pkgPath, JSON.stringify(pkgJson, null, 2), 'utf-8');
@@ -179,7 +186,8 @@ async function handleUpdate(targetPkgs: string[], projectDir: string) {
   const pkgsToUpdate = targetPkgs.length > 0 ? targetPkgs : allDepNames;
   let updatedCount = 0;
 
-  console.log(`[dpn] Sprawdzanie najnowszych wersji pakietów w rejestrze NPM...`);
+  const updateSpinner = new Spinner(`Sprawdzanie najnowszych wersji pakietów w rejestrze NPM...`);
+  updateSpinner.start();
 
   for (const name of pkgsToUpdate) {
     try {
@@ -194,16 +202,20 @@ async function handleUpdate(targetPkgs: string[], projectDir: string) {
       const newSpec = `^${latestVersion}`;
 
       if (currentSpec !== newSpec) {
+        updateSpinner.stop();
         console.log(`✨ [dpn] Zaktualizowano \x1b[1m${name}\x1b[0m: \x1b[90m${currentSpec}\x1b[0m ➔ \x1b[32;1m${newSpec}\x1b[0m`);
         pkgJson[section][name] = newSpec;
         updatedCount++;
-      } else {
-        console.log(`✅ [dpn] Pakiet \x1b[1m${name}\x1b[0m jest aktualny (${newSpec})`);
+        updateSpinner.start();
       }
     } catch (err: any) {
+      updateSpinner.stop();
       console.error(`❌ [dpn] Nie udało się pobrać metadanych dla "${name}": ${err.message}`);
+      updateSpinner.start();
     }
   }
+
+  updateSpinner.stop(`Zakończono sprawdzanie wersji`);
 
   if (updatedCount > 0) {
     await fs.promises.writeFile(pkgPath, JSON.stringify(pkgJson, null, 2), 'utf-8');
@@ -228,7 +240,8 @@ async function handleRemove(pkgNames: string[], projectDir: string) {
   const pkgJson = JSON.parse(await fs.promises.readFile(pkgPath, 'utf-8'));
 
   for (const name of pkgNames) {
-    console.log(`[dpn] Usuwanie pakietu ${name}...`);
+    const rmSpinner = new Spinner(`Usuwanie pakietu ${name}...`);
+    rmSpinner.start();
     if (pkgJson.dependencies) {
       delete pkgJson.dependencies[name];
     }
@@ -240,6 +253,7 @@ async function handleRemove(pkgNames: string[], projectDir: string) {
     if (fs.existsSync(targetNmDir)) {
       await fs.promises.rm(targetNmDir, { recursive: true, force: true }).catch(() => {});
     }
+    rmSpinner.stop(`Usunięto ${name}`);
   }
 
   await fs.promises.writeFile(pkgPath, JSON.stringify(pkgJson, null, 2), 'utf-8');

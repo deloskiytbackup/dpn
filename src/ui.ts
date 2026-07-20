@@ -1,3 +1,45 @@
+export class Spinner {
+  private text: string;
+  private spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  private frameIndex = 0;
+  private timer: NodeJS.Timeout | null = null;
+
+  constructor(text: string) {
+    this.text = text;
+  }
+
+  public start() {
+    if (this.timer) return;
+    this.timer = setInterval(() => {
+      const spinner = this.spinnerFrames[this.frameIndex % this.spinnerFrames.length];
+      this.frameIndex++;
+      const cyan = '\x1b[36m';
+      const reset = '\x1b[0m';
+      if (process.stdout.isTTY) {
+        process.stdout.write(`\r\x1b[K[dpn] ${cyan}${spinner}${reset} ${this.text}`);
+      }
+    }, 80);
+  }
+
+  public updateText(text: string) {
+    this.text = text;
+  }
+
+  public stop(successMessage?: string) {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    if (process.stdout.isTTY) {
+      if (successMessage) {
+        process.stdout.write(`\r\x1b[K[dpn] \x1b[32m✔\x1b[0m ${successMessage}\n`);
+      } else {
+        process.stdout.write(`\r\x1b[K`);
+      }
+    }
+  }
+}
+
 export class ProgressBar {
   private total: number;
   private current: number = 0;
@@ -24,7 +66,6 @@ export class ProgressBar {
 
     const text = actionText.length > 35 ? actionText.slice(0, 32) + '...' : actionText;
 
-    // Kolorowy i animowany pasek (ANSI escape codes)
     const cyan = '\x1b[36m';
     const green = '\x1b[32m';
     const gray = '\x1b[90m';
@@ -44,9 +85,15 @@ export class ProgressBar {
     }
   }
 
-  public finish() {
+  public finish(successText?: string) {
+    const green = '\x1b[32m';
+    const reset = '\x1b[0m';
+    const filledBar = '█'.repeat(this.width);
     if (process.stdout.isTTY) {
-      process.stdout.write(`\r\x1b[K`);
+      const msg = successText || `Pobieranie zakończone (${this.total}/${this.total})`;
+      process.stdout.write(`\r\x1b[K[dpn] ${green}✔ [${filledBar}] 100% (${this.total}/${this.total}) ${msg}${reset}\n`);
+    } else if (successText) {
+      console.log(`[dpn] ✔ ${successText}`);
     }
   }
 }
