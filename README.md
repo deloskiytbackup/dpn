@@ -1,5 +1,7 @@
 # 🚀 DPN (Direct Package Node)
 
+🇬🇧 **English** | 🇵🇱 [Polski](README.pl.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
@@ -93,6 +95,8 @@ dpn/
 ├── package.json
 ├── tsconfig.json
 ├── CHANGELOG.md
+├── README.md              # English documentation
+├── README.pl.md           # Polish documentation
 └── LICENSE
 ```
 
