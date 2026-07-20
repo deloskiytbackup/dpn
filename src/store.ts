@@ -17,8 +17,23 @@ export function getPackageStorePath(name: string, version: string): string {
   return path.join(STORE_DIR, name, version);
 }
 
-// Błyskawiczne pobieranie i rozpakowywanie w pamięci RAM bez zapisywania plików tymczasowych tgz na dysku
-export async function ensurePackageInStore(pkg: ResolvedPackage): Promise<string> {
+export interface ProgressState {
+  completed: number;
+  total: number;
+  pkg: ResolvedPackage;
+  downloadedBytes: number;
+  totalBytes: number;
+  speedBps: number;
+}
+
+let globalDownloadedBytes = 0;
+let globalTotalBytes = 0;
+const startTimeMs = Date.now();
+
+export async function ensurePackageInStore(
+  pkg: ResolvedPackage,
+  onChunk?: (bytesRead: number) => void
+): Promise<string> {
   const targetDir = getPackageStorePath(pkg.name, pkg.version);
   const packageJsonPath = path.join(targetDir, 'package.json');
 
@@ -43,12 +58,35 @@ export async function ensurePackageInStore(pkg: ResolvedPackage): Promise<string
     throw new Error(`Nie udało się pobrać archiwum ${pkg.name}@${pkg.version}`);
   }
 
+  const contentLength = response.headers.get('content-length');
+  if (contentLength) {
+    globalTotalBytes += parseInt(contentLength, 10);
+  }
+
+  const reader = response.body.getReader();
+  const trackingStream = new ReadableStream({
+    async start(controller) {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          break;
+        }
+        if (value) {
+          globalDownloadedBytes += value.byteLength;
+          if (onChunk) onChunk(value.byteLength);
+          controller.enqueue(value);
+        }
+      }
+    }
+  });
+
   const tarStream = tar.x({
     cwd: targetDir,
     strip: 1
   });
 
-  const nodeStream = Readable.fromWeb(response.body as any);
+  const nodeStream = Readable.fromWeb(trackingStream as any);
   await finished(nodeStream.pipe(tarStream));
 
   return targetDir;
@@ -57,21 +95,38 @@ export async function ensurePackageInStore(pkg: ResolvedPackage): Promise<string
 export async function ensurePackagesInStoreParallel(
   packages: ResolvedPackage[],
   concurrency: number = 16,
-  onProgress?: (completed: number, total: number, pkg: ResolvedPackage) => void
+  onProgress?: (state: ProgressState) => void
 ): Promise<void> {
   const total = packages.length;
   let completed = 0;
   let index = 0;
+  globalDownloadedBytes = 0;
+  globalTotalBytes = 0;
+  const startMs = Date.now();
+
+  function notifyProgress(pkg: ResolvedPackage) {
+    if (!onProgress) return;
+    const elapsedSec = Math.max((Date.now() - startMs) / 1000, 0.1);
+    const speedBps = globalDownloadedBytes / elapsedSec;
+    onProgress({
+      completed,
+      total,
+      pkg,
+      downloadedBytes: globalDownloadedBytes,
+      totalBytes: globalTotalBytes,
+      speedBps
+    });
+  }
 
   async function worker() {
     while (index < packages.length) {
       const i = index++;
       const pkg = packages[i];
-      await ensurePackageInStore(pkg);
+      await ensurePackageInStore(pkg, () => {
+        notifyProgress(pkg);
+      });
       completed++;
-      if (onProgress) {
-        onProgress(completed, total, pkg);
-      }
+      notifyProgress(pkg);
     }
   }
 

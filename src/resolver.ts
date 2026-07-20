@@ -32,7 +32,6 @@ export async function resolveDependencies(
     }
 
     if (!targetVersion) {
-      // Fallback: search for latest available or exact match
       targetVersion = metadata['dist-tags']?.['latest'] || availableVersions[availableVersions.length - 1];
     }
 
@@ -47,7 +46,6 @@ export async function resolveDependencies(
     }
 
     if (resolving.has(key)) {
-      // Cykliczna zależność - zapobiegamy zapętleniu
       return targetVersion;
     }
 
@@ -57,10 +55,18 @@ export async function resolveDependencies(
     const rawDeps = versionData.dependencies || {};
     const resolvedDeps: Record<string, string> = {};
 
-    // Rekurencyjnie rozwiązujemy zależności tej paczki
-    for (const [depName, depRange] of Object.entries(rawDeps)) {
-      const resolvedDepVersion = await resolvePackage(depName, depRange);
-      resolvedDeps[depName] = resolvedDepVersion;
+    // Równoległe rozstrzyganie pod-zależności (błyskawiczne drążenie drzewa)
+    const depEntries = Object.entries(rawDeps);
+    if (depEntries.length > 0) {
+      const resolvedList = await Promise.all(
+        depEntries.map(async ([depName, depRange]) => {
+          const resolvedDepVersion = await resolvePackage(depName, depRange);
+          return { depName, resolvedDepVersion };
+        })
+      );
+      for (const { depName, resolvedDepVersion } of resolvedList) {
+        resolvedDeps[depName] = resolvedDepVersion;
+      }
     }
 
     tree.set(key, {
@@ -76,8 +82,15 @@ export async function resolveDependencies(
     return targetVersion;
   }
 
-  for (const [name, range] of Object.entries(rootDependencies)) {
-    const resolvedVersion = await resolvePackage(name, range);
+  const rootEntries = Object.entries(rootDependencies);
+  const rootResolvedList = await Promise.all(
+    rootEntries.map(async ([name, range]) => {
+      const resolvedVersion = await resolvePackage(name, range);
+      return { name, resolvedVersion };
+    })
+  );
+
+  for (const { name, resolvedVersion } of rootResolvedList) {
     rootResolved[name] = resolvedVersion;
   }
 
