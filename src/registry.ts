@@ -26,41 +26,76 @@ export interface NpmPackageMetadata {
 const metadataCache = new Map<string, NpmPackageMetadata>();
 const REGISTRY_URL = 'https://registry.npmjs.org';
 
-export async function fetchPackageMetadata(packageName: string, retries = 3): Promise<NpmPackageMetadata> {
+class LimitPool {
+  private active = 0;
+  private queue: (() => void)[] = [];
+
+  constructor(private limit: number = 12) {}
+
+  async run<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.active >= this.limit) {
+      await new Promise<void>(resolve => this.queue.push(resolve));
+    }
+    this.active++;
+    try {
+      return await fn();
+    } finally {
+      this.active--;
+      if (this.queue.length > 0) {
+        const next = this.queue.shift();
+        if (next) next();
+      }
+    }
+  }
+}
+
+const fetchPool = new LimitPool(12);
+
+export async function fetchPackageMetadata(packageName: string, retries = 5): Promise<NpmPackageMetadata> {
   if (metadataCache.has(packageName)) {
     return metadataCache.get(packageName)!;
   }
 
-  const encodedName = packageName.startsWith('@')
-    ? `@${encodeURIComponent(packageName.slice(1))}`
-    : encodeURIComponent(packageName);
-
-  const url = `${REGISTRY_URL}/${encodedName}`;
-
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      const response = await fetch(url, {
-        headers: {
-          Accept: 'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status} ${response.statusText}`);
-      }
-
-      const data = (await response.json()) as NpmPackageMetadata;
-      metadataCache.set(packageName, data);
-      return data;
-    } catch (err: any) {
-      if (attempt === retries) {
-        throw new Error(`Nie udało się pobrać metadanych dla "${packageName}": ${err.message}`);
-      }
-      await new Promise(r => setTimeout(r, 400 * attempt));
+  return fetchPool.run(async () => {
+    if (metadataCache.has(packageName)) {
+      return metadataCache.get(packageName)!;
     }
-  }
 
-  throw new Error(`Nie udało się pobrać metadanych dla "${packageName}"`);
+    let url: string;
+    if (packageName.startsWith('@')) {
+      const parts = packageName.split('/');
+      const scope = parts[0];
+      const name = parts.slice(1).join('/');
+      url = `${REGISTRY_URL}/${encodeURIComponent(scope)}/${encodeURIComponent(name)}`;
+    } else {
+      url = `${REGISTRY_URL}/${encodeURIComponent(packageName)}`;
+    }
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'Accept': 'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status} ${response.statusText}`);
+        }
+
+        const data = (await response.json()) as NpmPackageMetadata;
+        metadataCache.set(packageName, data);
+        return data;
+      } catch (err: any) {
+        if (attempt === retries) {
+          throw new Error(`Nie udało się pobrać metadanych dla "${packageName}": ${err.message}`);
+        }
+        await new Promise(r => setTimeout(r, 300 * attempt));
+      }
+    }
+
+    throw new Error(`Nie udało się pobrać metadanych dla "${packageName}"`);
+  });
 }
 
 export async function downloadTarball(tarballUrl: string, destPath: string, retries = 3): Promise<void> {
