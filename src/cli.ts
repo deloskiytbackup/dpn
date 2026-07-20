@@ -4,12 +4,12 @@ import { resolveDependencies } from './resolver.js';
 import { ensurePackagesInStoreParallel } from './store.js';
 import { linkPackages } from './linker.js';
 import { runScript } from './runner.js';
-import { ProgressBar, Spinner } from './ui.js';
+import { ProgressBar, Spinner, formatBytes } from './ui.js';
 import { readLockfile, writeLockfile, reconstructTreeFromLockfile } from './lockfile.js';
 import { handleSelfUpgrade, checkRemoteVersion, printUpdateNotice } from './ota.js';
 import { fetchPackageMetadata } from './registry.js';
 
-const VERSION = '2.2.0';
+const VERSION = '2.3.0';
 
 async function handleInit(projectDir: string) {
   const pkgPath = path.join(projectDir, 'package.json');
@@ -107,7 +107,8 @@ async function handleInstall(projectDir: string, forceRefresh: boolean = false) 
   linkSpinner.stop(`Połączono ${packages.length} pakietów w katalogu node_modules`);
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-  console.log(`\n✨ [dpn] Sukces! Zakończono instalację w ${duration}s.`);
+  const sizeInfo = lastTotalBytes > 0 ? ` | Waga pobranych danych: \x1b[33;1m${formatBytes(lastTotalBytes)}\x1b[0m` : '';
+  console.log(`\n✨ [dpn] Sukces! Zainstalowano i połączono ${packages.length} pakietów w \x1b[32;1m${duration}s\x1b[0m${sizeInfo}.`);
 }
 
 async function handleAdd(args: string[], projectDir: string) {
@@ -300,7 +301,7 @@ function handleCompare() {
   console.log('└──────────────────┴───────────────────────────────┴───────────────────────────────┘\n');
 
   console.log('💡 \x1b[1mDlaczego DPN wygrywa?\x1b[0m');
-  console.log('- **Strumieniowanie w RAM (v2.2)**: Archiwum tgz jest rozpakowywane z widoku strumienia HTTP wprost do pamięci RAM.');
+  console.log('- **Strumieniowanie w RAM (v2.3)**: Archiwum tgz jest rozpakowywane z widoku strumienia HTTP wprost do pamięci RAM.');
   console.log('- **Magazyn Centralny (~/.dpn/store)**: Pakiety ściągane są tylko 1 raz i dowiązywane w 1 ms (Symlinks/Junctions).');
   console.log('- **Zabezpieczenie przed Ghost Dependencies**: Kod nie może zalinkować niezaadeklarowanej pod-zależności.');
   console.log('- **Dedykowany dla Windows**: Native wrappery .cmd oraz .ps1 z iniekcją NODE_PRESERVE_SYMLINKS.');
