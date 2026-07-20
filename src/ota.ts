@@ -2,12 +2,13 @@ import https from 'node:https';
 import child_process from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-const GITHUB_RAW_PACKAGE_URL = 'https://raw.githubusercontent.com/deloskiytbackup/dpn/main/package.json';
+import semver from 'semver';
 
 export async function checkRemoteVersion(): Promise<string | null> {
+  const url = `https://raw.githubusercontent.com/deloskiytbackup/dpn/main/package.json?t=${Date.now()}`;
+
   return new Promise((resolve) => {
-    const req = https.get(GITHUB_RAW_PACKAGE_URL, { timeout: 1500 }, (res) => {
+    const req = https.get(url, { timeout: 2000 }, (res) => {
       if (res.statusCode !== 200) {
         resolve(null);
         return;
@@ -41,7 +42,8 @@ export async function handleSelfUpgrade(currentVersion: string) {
     return;
   }
 
-  if (remoteVersion === currentVersion) {
+  // Porównujemy semwerowo, czy nowa wersja z GitHuba jest większa od aktualnej
+  if (!semver.gt(remoteVersion, currentVersion)) {
     console.log(`✅ [dpn OTA] Posiadasz już najnowszą wersję dpn v${currentVersion}!`);
     return;
   }
@@ -70,7 +72,7 @@ export async function handleSelfUpgrade(currentVersion: string) {
 }
 
 export function printUpdateNotice(currentVersion: string, remoteVersion: string) {
-  if (remoteVersion && remoteVersion !== currentVersion) {
+  if (remoteVersion && semver.gt(remoteVersion, currentVersion)) {
     console.log(`
 ┌───────────────────────────────────────────────────────────────┐
 │ 🚀 Dostępna nowa wersja dpn: \x1b[32;1mv${remoteVersion}\x1b[0m (Twoja: v${currentVersion})        │
