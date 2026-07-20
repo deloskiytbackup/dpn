@@ -14,7 +14,6 @@ export function getStoreDir(): string {
 }
 
 export function getPackageStorePath(name: string, version: string): string {
-  // Dla scoped packages, np. @types/node -> @types/node
   return path.join(STORE_DIR, name, version);
 }
 
@@ -29,21 +28,43 @@ export async function ensurePackageInStore(pkg: ResolvedPackage): Promise<string
   await fs.promises.mkdir(targetDir, { recursive: true });
   await fs.promises.mkdir(TMP_DIR, { recursive: true });
 
-  const safeFileName = `${pkg.name.replace('/', '__')}-${pkg.version}.tgz`;
+  const safeFileName = `${pkg.name.replace('/', '__')}-${pkg.version}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.tgz`;
   const tmpTarballPath = path.join(TMP_DIR, safeFileName);
 
-  console.log(`[dpn store] Pobieranie ${pkg.name}@${pkg.version}...`);
   await downloadTarball(pkg.tarballUrl, tmpTarballPath);
 
-  // Rozpakowywanie archiwum tarball (strip: 1 usuwa pierwszą warstwę "package/")
   await tar.x({
     file: tmpTarballPath,
     cwd: targetDir,
     strip: 1
   });
 
-  // Usuwamy tymczasowy plik .tgz
   await fs.promises.unlink(tmpTarballPath).catch(() => {});
 
   return targetDir;
+}
+
+export async function ensurePackagesInStoreParallel(
+  packages: ResolvedPackage[],
+  concurrency: number = 8,
+  onProgress?: (completed: number, total: number, pkg: ResolvedPackage) => void
+): Promise<void> {
+  const total = packages.length;
+  let completed = 0;
+  let index = 0;
+
+  async function worker() {
+    while (index < packages.length) {
+      const i = index++;
+      const pkg = packages[i];
+      await ensurePackageInStore(pkg);
+      completed++;
+      if (onProgress) {
+        onProgress(completed, total, pkg);
+      }
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, packages.length) }, () => worker());
+  await Promise.all(workers);
 }

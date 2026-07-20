@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveDependencies } from './resolver.js';
-import { ensurePackageInStore } from './store.js';
+import { ensurePackagesInStoreParallel } from './store.js';
 import { linkPackages } from './linker.js';
 import { runScript } from './runner.js';
+import { ProgressBar } from './ui.js';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 
 async function handleInit(projectDir: string) {
   const pkgPath = path.join(projectDir, 'package.json');
@@ -56,18 +57,23 @@ async function handleInstall(projectDir: string) {
   console.log(`[dpn] Rozwiązywanie zależności dla ${depCount} pakietów nadrzędnych...`);
   const { tree, rootResolved } = await resolveDependencies(rootDeps);
 
-  console.log(`[dpn] Znaleziono łącznie ${tree.size} unikalnych pakietów (z pod-zależnościami).`);
+  const packages = Array.from(tree.values());
+  console.log(`[dpn] Znaleziono łącznie ${packages.length} unikalnych pakietów (z pod-zależnościami).\n`);
 
-  // Pobieramy i rozpakowujemy wszystkie potrzebne paczki do globalnego store
-  for (const pkg of tree.values()) {
-    await ensurePackageInStore(pkg);
-  }
+  const progressBar = new ProgressBar(packages.length);
+
+  // Pobieramy i rozpakowujemy pakiety równolegle (pula 10 połączeń) z wizualizacją w czasie rzeczywistym
+  await ensurePackagesInStoreParallel(packages, 10, (completed, total, pkg) => {
+    progressBar.update(completed, `Pobieranie ${pkg.name}@${pkg.version}`);
+  });
+
+  progressBar.finish();
 
   // Tworzymy dowiązania (symlinks) w lokalnym node_modules
   await linkPackages(tree, rootResolved, projectDir);
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-  console.log(`\n[dpn] Sukces! Zainstalowano i połączono ${tree.size} pakietów w ${duration}s.`);
+  console.log(`\n✨ [dpn] Sukces! Zainstalowano i połączono ${packages.length} pakietów w ${duration}s.`);
 }
 
 async function handleAdd(pkgSpec: string, projectDir: string) {
@@ -100,7 +106,6 @@ async function handleAdd(pkgSpec: string, projectDir: string) {
 
   pkgJson.dependencies[name] = range.startsWith('^') || range.startsWith('~') || range === 'latest' ? `^${range === 'latest' ? '0.0.0' : range.replace(/[\^~]/, '')}` : range;
 
-  // Najpierw spróbujmy rozwiązać, aby wstawić właściwy prefiks SemVer w package.json
   const { rootResolved } = await resolveDependencies({ [name]: range });
   if (rootResolved[name]) {
     pkgJson.dependencies[name] = `^${rootResolved[name]}`;
@@ -108,7 +113,6 @@ async function handleAdd(pkgSpec: string, projectDir: string) {
 
   await fs.promises.writeFile(pkgPath, JSON.stringify(pkgJson, null, 2), 'utf-8');
 
-  // Uruchamiamy pełną instalację
   await handleInstall(projectDir);
 }
 
