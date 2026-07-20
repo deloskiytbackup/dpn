@@ -9,7 +9,7 @@ import { readLockfile, writeLockfile, reconstructTreeFromLockfile } from './lock
 import { handleSelfUpgrade, checkRemoteVersion, printUpdateNotice } from './ota.js';
 import { fetchPackageMetadata } from './registry.js';
 
-const VERSION = '2.1.0';
+const VERSION = '2.2.0';
 
 async function handleInit(projectDir: string) {
   const pkgPath = path.join(projectDir, 'package.json');
@@ -199,11 +199,12 @@ async function handleUpdate(targetPkgs: string[], projectDir: string) {
   const pkgsToUpdate = targetPkgs.length > 0 ? targetPkgs : allDepNames;
   let updatedCount = 0;
 
-  const updateSpinner = new Spinner(`Sprawdzanie najnowszych wersji pakietów w rejestrze NPM...`);
+  const updateSpinner = new Spinner(`Łączenie z rejestrem NPM...`);
   updateSpinner.start();
 
   for (const name of pkgsToUpdate) {
     try {
+      updateSpinner.updateText(`Sprawdzanie najnowszej wersji dla \x1b[1m${name}\x1b[0m...`);
       const meta = await fetchPackageMetadata(name);
       const latestVersion = meta['dist-tags']?.latest;
       if (!latestVersion) continue;
@@ -228,7 +229,7 @@ async function handleUpdate(targetPkgs: string[], projectDir: string) {
     }
   }
 
-  updateSpinner.stop(`Zakończono sprawdzanie wersji`);
+  updateSpinner.stop(`Przeszukano najnowsze wersje dla ${pkgsToUpdate.length} pakietów`);
 
   if (updatedCount > 0) {
     await fs.promises.writeFile(pkgPath, JSON.stringify(pkgJson, null, 2), 'utf-8');
@@ -299,7 +300,7 @@ function handleCompare() {
   console.log('└──────────────────┴───────────────────────────────┴───────────────────────────────┘\n');
 
   console.log('💡 \x1b[1mDlaczego DPN wygrywa?\x1b[0m');
-  console.log('- **Strumieniowanie w RAM (v2.1)**: Archiwum tgz jest rozpakowywane z widoku strumienia HTTP wprost do pamięci RAM.');
+  console.log('- **Strumieniowanie w RAM (v2.2)**: Archiwum tgz jest rozpakowywane z widoku strumienia HTTP wprost do pamięci RAM.');
   console.log('- **Magazyn Centralny (~/.dpn/store)**: Pakiety ściągane są tylko 1 raz i dowiązywane w 1 ms (Symlinks/Junctions).');
   console.log('- **Zabezpieczenie przed Ghost Dependencies**: Kod nie może zalinkować niezaadeklarowanej pod-zależności.');
   console.log('- **Dedykowany dla Windows**: Native wrappery .cmd oraz .ps1 z iniekcją NODE_PRESERVE_SYMLINKS.');
