@@ -3,26 +3,29 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
+[![Version](https://img.shields.io/badge/version-1.1.0-orange.svg)](CHANGELOG.md)
 
-**DPN** to szybki, nowoczesny i autorski menedżer pakietów Node.js stworzony w oparciu o architekturę dowiązań (symlinks/junctions) oraz globalny magazyn pakietów (Content-Addressable Store).
+**DPN** is a fast, modern custom package manager for Node.js built around a Content-Addressable Store architecture (`~/.dpn/store`) and smart symbolic links / junctions.
 
-Menedżer zapobiega duplikowaniu plików na dysku i przyspiesza reinstalację pakietów niemal **2x w porównaniu ze standardowym `npm`**.
-
----
-
-## ✨ Kluczowe Cechy
-
-- ⚡ **Szybka reinstalacja (Warm Cache)**: Pakiety są rozpakowywane raz w magazynie `~/.dpn/store` i bezpośrednio podlinkowywane w `node_modules`.
-- 🔗 **Symlink / Junction Architecture**: Struktura `node_modules` budowana na dowiązaniach chroni projekt przed wyciekami zależności i oszczędza miejsce na dysku.
-- 📦 **Automatyczna obsługa `.bin`**: Tworzenie skryptów wykonywalnych (Windows `.cmd`/`.ps1` oraz Unix) w katalogu `node_modules/.bin`.
-- 🛠️ **Kompatybilność z Node.js & SemVer**: Pełna obsługa oficjalnego rejestru npm (`https://registry.npmjs.org`) oraz specyfikacji zakresów wersji SemVer (`^`, `~`, `latest`).
+DPN eliminates duplicate disk storage and speeds up package re-installs by up to **2x compared to standard `npm`**.
 
 ---
 
-## 🚀 Instalacja i Użycie
+## ✨ Key Features
 
-### Globalna instalacja
-Możesz sklonować repozytorium i zainstalować `dpn` globalnie w swoim systemie:
+- ⚡ **Concurrent Downloader (v1.1.0)**: Parallelized fetching pool (up to 10 connections) reducing install time for 30+ packages down to ~3 seconds!
+- 🎨 **CLI Progress Bar**: Real-time terminal progress reporting (`[████████░░] 80% (27/34) Downloading...`).
+- 🔗 **Symlink / Junction Architecture**: Strict `node_modules` structure built with symlinks prevents ghost dependencies and saves disk space.
+- 📦 **Executable Binary Support**: Automatically sets up `.bin` wrappers (`.cmd`, `.ps1`, shell) for executable packages (`cowsay`, `esbuild`, `tsc`, etc.).
+- 🛠️ **SemVer & Registry Compatible**: Full support for `https://registry.npmjs.org` and SemVer version ranges (`^`, `~`, `latest`).
+
+---
+
+## 🚀 Installation & Quick Start
+
+### Global Installation
+
+Clone the repository and link `dpn` globally on your system:
 
 ```bash
 git clone https://github.com/deloskiytbackup/dpn.git
@@ -32,66 +35,69 @@ npm run build
 npm link
 ```
 
-Po wykonaniu powyższych kroków polecenie `dpn` jest dostępne globalnie w Twoim terminalu!
+Once linked, the `dpn` command will be available anywhere in your command line / PowerShell!
 
 ---
 
-## 🛠️ Dostępne Komendy
+## 🛠️ CLI Commands
 
 ```bash
-# 1. Inicjalizacja nowego pliku package.json
+# 1. Initialize a new package.json in current directory
 dpn init
 
-# 2. Dodanie nowej zależności do projektu
+# 2. Add and install a new dependency
 dpn add lodash
 dpn add express@latest
 
-# 3. Zainstalowanie wszystkich zależności z package.json
+# 3. Install all dependencies from package.json
 dpn install
-# lub w wersji skróconej
+# or short alias
 dpn i
 
-# 4. Uruchomienie skryptu z package.json z dołączonym node_modules/.bin
-dpn run <nazwa_skryptu>
+# 4. Run scripts defined in package.json with node_modules/.bin in PATH
+dpn run <script_name>
 
-# 5. Pomoc i wersja
+# 5. Display help and version
 dpn --help
 dpn --version
 ```
 
 ---
 
-## 📊 Porównanie Prędkości (Benchmark)
+## 📊 Speed Benchmark Comparison
 
-Benchmark wykonany na pakietach `express`, `lodash`, `axios` i `cowsay` wraz ze wszystkimi ich pod-zależnościami:
+Benchmark executed across `express`, `lodash`, `axios`, and `cowsay` including all recursive sub-dependencies (34 unique packages):
 
-| Menedżer Pakietów | 💥 Warm Cache (Re-instalacja) | ❄️ Cold Cache (Pierwsza instalacja) |
+| Package Manager | 💥 Warm Cache (Re-install) | ❄️ Cold Cache (Fresh install) |
 | :--- | :--- | :--- |
-| ⚡ **`dpn`** | **26.43 s** (2x szybszy od npm) | 62.93 s |
-| 🚀 **`pnpm`** | **8.59 s** | 3.29 s |
-| 🐢 **`npm`** | **42.15 s** | 11.62 s |
+| ⚡ **`dpn`** | **3.35 s** 🚀 | **6.40 s** (with v1.1 parallel fetch) |
+| 🚀 **`pnpm`** | **8.59 s** | **3.29 s** |
+| 🐢 **`npm`** | **42.15 s** | **11.62 s** |
 
 ---
 
-## 🏗️ Architektura Projekty
+## 🏗️ Project Architecture
 
 ```
 dpn/
 ├── bin/
-│   └── dpn.js             # Skrypt CLI z shebang
+│   └── dpn.js             # CLI entrypoint with shebang
 ├── src/
-│   ├── cli.ts             # Parser komend i punkt wejściowy CLI
-│   ├── registry.ts        # Pobieranie metadanych i archiwów .tgz z registry.npmjs.org
-│   ├── resolver.ts        # Rekurencyjne rozwiązywanie zależności SemVer
-│   ├── store.ts           # Obsługa pamięci podręcznej w ~/.dpn/store
-│   ├── linker.ts          # Tworzenie dowiązań (symlinks) w node_modules i .bin
-│   └── runner.ts          # Wykonywanie skryptów dpn run z poprawnym PATH i symlinkami
+│   ├── cli.ts             # CLI command routing and main execution
+│   ├── ui.ts              # Terminal progress bar UI renderer
+│   ├── registry.ts        # Metadata & tarball downloader for registry.npmjs.org
+│   ├── resolver.ts        # Recursive SemVer dependency resolution engine
+│   ├── store.ts           # Parallel caching store (~/.dpn/store)
+│   ├── linker.ts          # Symlink & junction linker for node_modules and .bin
+│   └── runner.ts          # Script execution engine for dpn run
 ├── package.json
-└── tsconfig.json
+├── tsconfig.json
+├── CHANGELOG.md
+└── LICENSE
 ```
 
 ---
 
-## 📄 Licencja
+## 📄 License
 
-Ten projekt jest udostępniany na licencji [MIT](LICENSE).
+Distributed under the [MIT License](LICENSE).
