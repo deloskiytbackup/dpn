@@ -57,10 +57,14 @@ dpn install
 # or short alias
 dpn i
 
-# 4. Auto-update DPN to latest version Over-The-Air (OTA)
+# 4. Update dependencies to latest versions
+dpn update
+dpn update lodash express
+
+# 5. Auto-update DPN CLI to latest version Over-The-Air (OTA)
 dpn upgrade
 
-# 5. Run scripts defined in package.json with node_modules/.bin in PATH
+# 6. Run scripts defined in package.json with node_modules/.bin in PATH
 dpn run <script_name>
 
 # 5. Display help and version

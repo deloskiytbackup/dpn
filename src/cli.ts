@@ -7,8 +7,9 @@ import { runScript } from './runner.js';
 import { ProgressBar } from './ui.js';
 import { readLockfile, writeLockfile, reconstructTreeFromLockfile } from './lockfile.js';
 import { handleSelfUpgrade, checkRemoteVersion, printUpdateNotice } from './ota.js';
+import { fetchPackageMetadata } from './registry.js';
 
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 
 async function handleInit(projectDir: string) {
   const pkgPath = path.join(projectDir, 'package.json');
@@ -142,6 +143,60 @@ async function handleAdd(args: string[], projectDir: string) {
   await handleInstall(projectDir, true);
 }
 
+async function handleUpdate(targetPkgs: string[], projectDir: string) {
+  const pkgPath = path.join(projectDir, 'package.json');
+  if (!fs.existsSync(pkgPath)) {
+    throw new Error('Nie znaleziono pliku package.json w tym katalogu.');
+  }
+
+  const pkgJson = JSON.parse(await fs.promises.readFile(pkgPath, 'utf-8'));
+  const deps = pkgJson.dependencies || {};
+  const devDeps = pkgJson.devDependencies || {};
+
+  const allDepNames = Array.from(new Set([...Object.keys(deps), ...Object.keys(devDeps)]));
+  if (allDepNames.length === 0) {
+    console.log('[dpn] Brak pakietów do zaktualizowania w package.json.');
+    return;
+  }
+
+  const pkgsToUpdate = targetPkgs.length > 0 ? targetPkgs : allDepNames;
+  let updatedCount = 0;
+
+  console.log(`[dpn] Sprawdzanie najnowszych wersji pakietów w rejestrze NPM...`);
+
+  for (const name of pkgsToUpdate) {
+    try {
+      const meta = await fetchPackageMetadata(name);
+      const latestVersion = meta['dist-tags']?.latest;
+      if (!latestVersion) continue;
+
+      const isDev = !!devDeps[name];
+      const section = isDev ? 'devDependencies' : 'dependencies';
+      const currentSpec = pkgJson[section]?.[name] || '';
+
+      const newSpec = `^${latestVersion}`;
+
+      if (currentSpec !== newSpec) {
+        console.log(`✨ [dpn] Zaktualizowano \x1b[1m${name}\x1b[0m: \x1b[90m${currentSpec}\x1b[0m ➔ \x1b[32;1m${newSpec}\x1b[0m`);
+        pkgJson[section][name] = newSpec;
+        updatedCount++;
+      } else {
+        console.log(`✅ [dpn] Pakiet \x1b[1m${name}\x1b[0m jest aktualny (${newSpec})`);
+      }
+    } catch (err: any) {
+      console.error(`❌ [dpn] Nie udało się pobrać metadanych dla "${name}": ${err.message}`);
+    }
+  }
+
+  if (updatedCount > 0) {
+    await fs.promises.writeFile(pkgPath, JSON.stringify(pkgJson, null, 2), 'utf-8');
+    console.log(`\n[dpn] Re-instalowanie ${updatedCount} zaktualizowanych pakietów...`);
+    await handleInstall(projectDir, true);
+  } else {
+    console.log(`\n✅ Wszystkie wskazane pakiety są już w najnowszych wersjach!`);
+  }
+}
+
 async function handleRemove(pkgNames: string[], projectDir: string) {
   const pkgPath = path.join(projectDir, 'package.json');
   if (!fs.existsSync(pkgPath)) {
@@ -187,6 +242,7 @@ Dostępne komendy:
   init                     Tworzy nowy plik package.json
   install, i               Instaluje wszystkie zależności z package.json (używając dpn-lock.json)
   add <pkg> [-D]           Dodaje pakiet do dependencies (lub devDependencies z flagą -D)
+  update, up [pkg...]      Aktualizuje pakiety projektu do najnowszych wersji z NPM
   remove, rm <pkg>         Usuwa pakiet z projektu
   run <script>             Uruchamia skrypt zdefiniowany w package.json
   upgrade, ota             Automatycznie aktualizuje dpn do najnowszej wersji z GitHuba (OTA)
@@ -200,7 +256,6 @@ export async function main() {
   const command = args[0];
   const cwd = process.cwd();
 
-  // Sprawdzenie nowej wersji w tle dla poleceń (z wyjątkiem polecenia upgrade)
   let updatePromise: Promise<string | null> | null = null;
   if (command !== 'upgrade' && command !== 'ota' && command !== '-v' && command !== '--version') {
     updatePromise = checkRemoteVersion();
@@ -217,6 +272,10 @@ export async function main() {
         break;
       case 'add':
         await handleAdd(args.slice(1), cwd);
+        break;
+      case 'update':
+      case 'up':
+        await handleUpdate(args.slice(1), cwd);
         break;
       case 'remove':
       case 'rm':

@@ -57,10 +57,14 @@ dpn install
 # lub skrót
 dpn i
 
-# 4. Automatyczna aktualizacja DPN do najnowszej wersji (OTA)
+# 4. Aktualizacja pakietów projektu do najnowszych wersji z NPM
+dpn update
+dpn update lodash express
+
+# 5. Automatyczna aktualizacja DPN CLI do najnowszej wersji (OTA)
 dpn upgrade
 
-# 5. Uruchamianie skryptów z package.json
+# 6. Uruchamianie skryptów z package.json
 dpn run <nazwa_skryptu>m node_modules/.bin
 dpn run <nazwa_skryptu>
 
