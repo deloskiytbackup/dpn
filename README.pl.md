@@ -73,9 +73,11 @@ Komenda `dpn` będzie dostępna globalnie w PowerShell i CMD!
 # 1. Inicjalizacja nowego pliku package.json
 dpn init
 
-# 2. Dodanie nowej zależności
+# 2. Dodanie nowej zależności z własną wersją
 dpn add lodash
 dpn add express@latest
+dpn add prisma -version 5.10.0
+dpn add @prisma/client@5.10.0 --exact
 
 # 3. Instalacja wszystkich zależności z package.json
 dpn install

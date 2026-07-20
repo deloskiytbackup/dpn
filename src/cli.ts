@@ -98,10 +98,23 @@ async function handleInstall(projectDir: string, forceRefresh: boolean = false) 
 
 async function handleAdd(args: string[], projectDir: string) {
   const isDev = args.includes('-D') || args.includes('--save-dev');
-  const pkgSpecs = args.filter(a => a !== '-D' && a !== '--save-dev' && !a.startsWith('-'));
+  const isExact = args.includes('-E') || args.includes('--exact');
+
+  let customVersion: string | null = null;
+  const versionIdx = args.findIndex(a => a === '--version' || a === '-version' || a === '-v');
+  if (versionIdx !== -1 && args[versionIdx + 1]) {
+    customVersion = args[versionIdx + 1];
+  }
+
+  const pkgSpecs = args.filter((a, idx) => {
+    if (a === '-D' || a === '--save-dev' || a === '-E' || a === '--exact') return false;
+    if (a === '--version' || a === '-version' || a === '-v') return false;
+    if (versionIdx !== -1 && idx === versionIdx + 1) return false;
+    return true;
+  });
 
   if (pkgSpecs.length === 0) {
-    console.error('Błąd: Podaj nazwę pakietu (np. dpn add lodash lub dpn add -D typescript)');
+    console.error('Błąd: Podaj nazwę pakietu (np. dpn add prisma -version 5.10.0 lub dpn add -D typescript)');
     process.exit(1);
   }
 
@@ -118,24 +131,28 @@ async function handleAdd(args: string[], projectDir: string) {
 
   for (const pkgSpec of pkgSpecs) {
     let name = pkgSpec;
-    let range = 'latest';
+    let range = customVersion || 'latest';
 
-    if (pkgSpec.startsWith('@')) {
-      const lastIdx = pkgSpec.lastIndexOf('@');
-      if (lastIdx > 0) {
-        name = pkgSpec.slice(0, lastIdx);
-        range = pkgSpec.slice(lastIdx + 1);
+    if (!customVersion) {
+      if (pkgSpec.startsWith('@')) {
+        const lastIdx = pkgSpec.lastIndexOf('@');
+        if (lastIdx > 0) {
+          name = pkgSpec.slice(0, lastIdx);
+          range = pkgSpec.slice(lastIdx + 1);
+        }
+      } else if (pkgSpec.includes('@')) {
+        const parts = pkgSpec.split('@');
+        name = parts[0];
+        range = parts[1];
       }
-    } else if (pkgSpec.includes('@')) {
-      const parts = pkgSpec.split('@');
-      name = parts[0];
-      range = parts[1];
     }
 
     console.log(`[dpn] Dodawanie pakietu ${name}@${range} do ${section}...`);
     const { rootResolved } = await resolveDependencies({ [name]: range });
     const resolvedVersion = rootResolved[name] || range;
-    pkgJson[section][name] = `^${resolvedVersion.replace(/[\^~]/, '')}`;
+    const cleanVersion = resolvedVersion.replace(/[\^~]/, '');
+
+    pkgJson[section][name] = (isExact || customVersion) ? cleanVersion : `^${cleanVersion}`;
   }
 
   await fs.promises.writeFile(pkgPath, JSON.stringify(pkgJson, null, 2), 'utf-8');
@@ -273,7 +290,7 @@ Użycie:
 Dostępne komendy:
   init                     Tworzy nowy plik package.json
   install, i               Instaluje wszystkie zależności z package.json (używając dpn-lock.json)
-  add <pkg> [-D]           Dodaje pakiet do dependencies (lub devDependencies z flagą -D)
+  add <pkg> [-D] [-version <v>] Dodaje pakiet (wspiera -version 5.10.0, @5.10.0, -exact oraz -D)
   update, up [pkg...]      Aktualizuje pakiety projektu do najnowszych wersji z NPM
   remove, rm <pkg>         Usuwa pakiet z projektu
   compare, bench           Wyświetla porównanie wydajności i cech: pnpm vs npm vs bun vs DPN

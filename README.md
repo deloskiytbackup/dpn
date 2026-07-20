@@ -73,9 +73,11 @@ Once linked, the `dpn` command will be available anywhere in your command line /
 # 1. Initialize a new package.json in current directory
 dpn init
 
-# 2. Add and install a new dependency
+# 2. Add and install dependencies with custom version support
 dpn add lodash
 dpn add express@latest
+dpn add prisma -version 5.10.0
+dpn add @prisma/client@5.10.0 --exact
 
 # 3. Install all dependencies from package.json
 dpn install
