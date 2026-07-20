@@ -69,8 +69,8 @@ export async function handleSelfUpgrade(currentVersion: string) {
   const dpnRepoDir = path.resolve(__dirname, '..');
 
   try {
-    console.log('⬇️  1/3 Pobieranie najnowszego kodu z GitHuba...');
-    child_process.execSync('git pull origin main', { cwd: dpnRepoDir, stdio: 'inherit' });
+    console.log('⬇️  1/3 Pobieranie i synchronizacja najnowszego kodu z GitHuba...');
+    child_process.execSync('git fetch origin main && git reset --hard origin/main', { cwd: dpnRepoDir, stdio: 'inherit' });
 
     console.log('\n🔨 2/3 Kompilacja projektu TypeScript...');
     child_process.execSync('npm run build', { cwd: dpnRepoDir, stdio: 'inherit' });
