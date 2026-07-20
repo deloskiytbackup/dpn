@@ -9,7 +9,7 @@ import { readLockfile, writeLockfile, reconstructTreeFromLockfile } from './lock
 import { handleSelfUpgrade, checkRemoteVersion, printUpdateNotice } from './ota.js';
 import { fetchPackageMetadata } from './registry.js';
 
-const VERSION = '2.0.0';
+const VERSION = '2.1.0';
 
 async function handleInit(projectDir: string) {
   const pkgPath = path.join(projectDir, 'package.json');
@@ -64,7 +64,7 @@ async function handleInstall(projectDir: string, forceRefresh: boolean = false) 
   const existingLock = !forceRefresh ? await readLockfile(projectDir) : null;
   const isLockValid = existingLock && Object.keys(rootDeps).every(name => existingLock.rootResolved[name]);
 
-  const resolveSpinner = new Spinner(`Rozwiązywanie drzewa zależności dla ${depCount} pakietów w NPM...`);
+  const resolveSpinner = new Spinner(`Łączenie z rejestrem NPM...`);
   resolveSpinner.start();
 
   if (isLockValid && existingLock) {
@@ -73,7 +73,9 @@ async function handleInstall(projectDir: string, forceRefresh: boolean = false) 
     tree = reconstructed.tree;
     rootResolved = reconstructed.rootResolved;
   } else {
-    const resolved = await resolveDependencies(rootDeps);
+    const resolved = await resolveDependencies(rootDeps, (pkgName, range) => {
+      resolveSpinner.updateText(`Pobieranie metadanych \x1b[1m${pkgName}@${range}\x1b[0m z NPM...`);
+    });
     tree = resolved.tree;
     rootResolved = resolved.rootResolved;
     resolveSpinner.stop(`Rozwiązano strukturę ${Object.keys(rootResolved).length} zależności w rejestrze NPM`);
@@ -159,9 +161,13 @@ async function handleAdd(args: string[], projectDir: string) {
       }
     }
 
-    const addSpinner = new Spinner(`Dodawanie pakietu ${name}@${range} do ${section}...`);
+    const addSpinner = new Spinner(`Inicjowanie zapytania dla ${name}@${range}...`);
     addSpinner.start();
-    const { rootResolved } = await resolveDependencies({ [name]: range });
+
+    const { rootResolved } = await resolveDependencies({ [name]: range }, (pkgName, r) => {
+      addSpinner.updateText(`Analizowanie metadanych \x1b[1m${pkgName}@${r}\x1b[0m...`);
+    });
+
     const resolvedVersion = rootResolved[name] || range;
     const cleanVersion = resolvedVersion.replace(/[\^~]/, '');
 
@@ -293,7 +299,7 @@ function handleCompare() {
   console.log('└──────────────────┴───────────────────────────────┴───────────────────────────────┘\n');
 
   console.log('💡 \x1b[1mDlaczego DPN wygrywa?\x1b[0m');
-  console.log('- **Strumieniowanie w RAM (v2.0)**: Archiwum tgz jest rozpakowywane z widoku strumienia HTTP wprost do pamięci RAM.');
+  console.log('- **Strumieniowanie w RAM (v2.1)**: Archiwum tgz jest rozpakowywane z widoku strumienia HTTP wprost do pamięci RAM.');
   console.log('- **Magazyn Centralny (~/.dpn/store)**: Pakiety ściągane są tylko 1 raz i dowiązywane w 1 ms (Symlinks/Junctions).');
   console.log('- **Zabezpieczenie przed Ghost Dependencies**: Kod nie może zalinkować niezaadeklarowanej pod-zależności.');
   console.log('- **Dedykowany dla Windows**: Native wrappery .cmd oraz .ps1 z iniekcją NODE_PRESERVE_SYMLINKS.');

@@ -13,13 +13,18 @@ export interface ResolvedPackage {
 export type ResolvedTree = Map<string, ResolvedPackage>; // key: `${name}@${version}`
 
 export async function resolveDependencies(
-  rootDependencies: Record<string, string>
+  rootDependencies: Record<string, string>,
+  onResolvingPackage?: (name: string, range: string) => void
 ): Promise<{ tree: ResolvedTree; rootResolved: Record<string, string> }> {
   const tree: ResolvedTree = new Map();
   const rootResolved: Record<string, string> = {};
   const resolving = new Set<string>();
 
   async function resolvePackage(name: string, range: string): Promise<string> {
+    if (onResolvingPackage) {
+      onResolvingPackage(name, range);
+    }
+
     const metadata = await fetchPackageMetadata(name);
     const availableVersions = Object.keys(metadata.versions);
 
@@ -55,7 +60,6 @@ export async function resolveDependencies(
     const rawDeps = versionData.dependencies || {};
     const resolvedDeps: Record<string, string> = {};
 
-    // Równoległe rozstrzyganie pod-zależności (błyskawiczne drążenie drzewa)
     const depEntries = Object.entries(rawDeps);
     if (depEntries.length > 0) {
       const resolvedList = await Promise.all(
