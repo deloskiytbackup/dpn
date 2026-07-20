@@ -8,7 +8,7 @@ import { ProgressBar } from './ui.js';
 import { readLockfile, writeLockfile, reconstructTreeFromLockfile } from './lockfile.js';
 import { handleSelfUpgrade, checkRemoteVersion, printUpdateNotice } from './ota.js';
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 
 async function handleInit(projectDir: string) {
   const pkgPath = path.join(projectDir, 'package.json');
