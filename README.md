@@ -15,6 +15,7 @@ DPN eliminates duplicate disk storage and speeds up package re-installs by up to
 
 ## ✨ Key Features
 
+- 🔄 **Over-The-Air (OTA) Updates (v1.3.0)**: Built-in self-updater (`dpn upgrade`) that automatically fetches, builds, and re-links the latest version directly from GitHub!
 - ⚡ **Concurrent Downloader (v1.1.0)**: Parallelized fetching pool (up to 10 connections) reducing install time for 30+ packages down to ~3 seconds!
 - 🎨 **CLI Progress Bar**: Real-time terminal progress reporting (`[████████░░] 80% (27/34) Downloading...`).
 - 🔗 **Symlink / Junction Architecture**: Strict `node_modules` structure built with symlinks prevents ghost dependencies and saves disk space.
@@ -56,7 +57,10 @@ dpn install
 # or short alias
 dpn i
 
-# 4. Run scripts defined in package.json with node_modules/.bin in PATH
+# 4. Auto-update DPN to latest version Over-The-Air (OTA)
+dpn upgrade
+
+# 5. Run scripts defined in package.json with node_modules/.bin in PATH
 dpn run <script_name>
 
 # 5. Display help and version

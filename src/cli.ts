@@ -6,8 +6,9 @@ import { linkPackages } from './linker.js';
 import { runScript } from './runner.js';
 import { ProgressBar } from './ui.js';
 import { readLockfile, writeLockfile, reconstructTreeFromLockfile } from './lockfile.js';
+import { handleSelfUpgrade, checkRemoteVersion, printUpdateNotice } from './ota.js';
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 
 async function handleInit(projectDir: string) {
   const pkgPath = path.join(projectDir, 'package.json');
@@ -61,7 +62,6 @@ async function handleInstall(projectDir: string, forceRefresh: boolean = false) 
 
   const existingLock = !forceRefresh ? await readLockfile(projectDir) : null;
   
-  // Sprawdzamy czy możemy użyć pliku lockfile (jeśli wszystkie główne zależności się zgadzają)
   const isLockValid = existingLock && Object.keys(rootDeps).every(name => existingLock.rootResolved[name]);
 
   if (isLockValid && existingLock) {
@@ -75,7 +75,6 @@ async function handleInstall(projectDir: string, forceRefresh: boolean = false) 
     tree = resolved.tree;
     rootResolved = resolved.rootResolved;
 
-    // Zapisujemy nowy plik lockfile
     await writeLockfile(projectDir, tree, rootResolved);
   }
 
@@ -140,7 +139,6 @@ async function handleAdd(args: string[], projectDir: string) {
 
   await fs.promises.writeFile(pkgPath, JSON.stringify(pkgJson, null, 2), 'utf-8');
 
-  // Po dodaniu nowej paczki odświeżamy lockfile i instalujemy
   await handleInstall(projectDir, true);
 }
 
@@ -166,7 +164,6 @@ async function handleRemove(pkgNames: string[], projectDir: string) {
       delete pkgJson.devDependencies[name];
     }
 
-    // Usuwamy folder z node_modules
     const targetNmDir = path.join(projectDir, 'node_modules', name);
     if (fs.existsSync(targetNmDir)) {
       await fs.promises.rm(targetNmDir, { recursive: true, force: true }).catch(() => {});
@@ -175,14 +172,13 @@ async function handleRemove(pkgNames: string[], projectDir: string) {
 
   await fs.promises.writeFile(pkgPath, JSON.stringify(pkgJson, null, 2), 'utf-8');
 
-  // Przeinstalowujemy pozostałe zależności
   await handleInstall(projectDir, true);
 }
 
 function showHelp() {
   console.log(`
-🚀 dpn (Direct Package Node) v${VERSION}
-Autorski menedżer pakietów z obsługą dowiązań (symlinks), lockfile i globalnego store.
+🚀 \x1b[1mdpn (Direct Package Node) v${VERSION}\x1b[0m
+Autorski menedżer pakietów z obsługą dowiązań (symlinks), lockfile i aktualizacji OTA.
 
 Użycie:
   dpn <command> [options]
@@ -193,6 +189,7 @@ Dostępne komendy:
   add <pkg> [-D]           Dodaje pakiet do dependencies (lub devDependencies z flagą -D)
   remove, rm <pkg>         Usuwa pakiet z projektu
   run <script>             Uruchamia skrypt zdefiniowany w package.json
+  upgrade, ota             Automatycznie aktualizuje dpn do najnowszej wersji z GitHuba (OTA)
   -v, --version            Wyświetla wersję dpn
   -h, --help               Wyświetla tę pomoc
 `);
@@ -202,6 +199,12 @@ export async function main() {
   const args = process.argv.slice(2);
   const command = args[0];
   const cwd = process.cwd();
+
+  // Sprawdzenie nowej wersji w tle dla poleceń (z wyjątkiem polecenia upgrade)
+  let updatePromise: Promise<string | null> | null = null;
+  if (command !== 'upgrade' && command !== 'ota' && command !== '-v' && command !== '--version') {
+    updatePromise = checkRemoteVersion();
+  }
 
   try {
     switch (command) {
@@ -226,6 +229,10 @@ export async function main() {
         }
         await runScript(args[1], cwd);
         break;
+      case 'upgrade':
+      case 'ota':
+        await handleSelfUpgrade(VERSION);
+        break;
       case '-v':
       case '--version':
         console.log(`dpn v${VERSION}`);
@@ -239,6 +246,13 @@ export async function main() {
         console.error(`Nieznana komenda: ${command}`);
         showHelp();
         process.exit(1);
+    }
+
+    if (updatePromise) {
+      const remote = await updatePromise;
+      if (remote && remote !== VERSION) {
+        printUpdateNotice(VERSION, remote);
+      }
     }
   } catch (err: any) {
     console.error(`\n❌ [dpn błąd]: ${err.message}`);

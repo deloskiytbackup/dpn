@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2026-07-20
+
+### Added
+- **Over-The-Air (OTA) Updates (`dpn upgrade` / `dpn ota`)**: Built-in self-updater that fetches the latest code from GitHub, recompiles TypeScript, and updates the global binary link automatically.
+- **Background Update Notification Banner**: Automatically checks for new releases on GitHub in the background and notifies the user with a stylized CLI banner when a new version is available.
+
+---
+
 ## [1.1.0] - 2026-07-20
 
 ### Added

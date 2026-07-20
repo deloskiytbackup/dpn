@@ -15,19 +15,20 @@ Menedżer zapobiega duplikowaniu plików na dysku i przyspiesza reinstalację pa
 
 ## ✨ Kluczowe Cechy
 
-- ⚡ **Równoległe pobieranie (v1.1.0)**: Pula współbieżnych połączeń (do 10 pobrań jednocześnie) redukuje czas czystej instalacji z 62s do ~3 sekund!
-- 🎨 **Pasek Postępu CLI**: Interaktywny wskaźnik postępu w czasie rzeczywistym (`[████████░░] 80% (27/34) Pobieranie...`).
-- 🔗 **Architektura Symlink / Junction**: Ścisła struktura `node_modules` budowana na dowiązaniach chroni projekt przed wyciekami zależności i oszczędza miejsce na dysku.
-- 📦 **Automatyczna obsługa `.bin`**: Tworzenie skryptów wykonywalnych (Windows `.cmd`/`.ps1` oraz Unix) w katalogu `node_modules/.bin`.
-- 🛠️ **Kompatybilność z Node.js & SemVer**: Pełna obsługa oficjalnego rejestru npm (`https://registry.npmjs.org`) oraz specyfikacji zakresów wersji SemVer (`^`, `~`, `latest`).
+- 🔄 **Aktualizacje Over-The-Air (OTA) (v1.3.0)**: Wbudowany mechanizm samo-aktualizacji (`dpn upgrade`), który automatycznie pobiera, kompiluje i aktualizuje dpn prosto z GitHuba!
+- ⚡ **Równoległe Pobieranie (v1.1.0)**: Wielowątkowe pobieranie pakietów (pula 10 połączeń), dzięki czemu instalacja 30+ pakietów trwa ~3 sekundy!
+- 🎨 **Pasek Postępu w Konsoli**: Pasek w czasie rzeczywistym (`[████████░░] 80% Pobieranie express...`).
+- 🔗 **Architektura Dowiązań Symlink / Junction**: Zmniejsza zużycie dysku i zapobiega nieformalnym zależnościom (ghost dependencies).
+- 📦 **Obsługa Skryptów Wykonywalnych**: Automatycznie konfiguruje wrappery `.bin` (`.cmd`, `.ps1`) dla pakietów CLI (`cowsay`, `esbuild`, `tsc`).
+- 🛠️ **Zgodność z SemVer i NPM Registry**: Pełna obsługa `https://registry.npmjs.org` i zakresów SemVer (`^`, `~`, `latest`).
 
 ---
 
 ## 🚀 Instalacja i Szybki Start
 
-### Globalna instalacja
+### Instalacja Globalna
 
-Sklonuj repozytorium i zainstaluj `dpn` globalnie w swoim systemie:
+Sklonuj repozytorium i połącz `dpn` globalnie w swoim systemie:
 
 ```bash
 git clone https://github.com/deloskiytbackup/dpn.git
@@ -37,26 +38,30 @@ npm run build
 npm link
 ```
 
-Po wykonaniu powyższych kroków polecenie `dpn` jest dostępne globalnie w Twoim terminalu!
+Komenda `dpn` będzie dostępna globalnie w PowerShell i CMD!
 
 ---
 
-## 🛠️ Dostępne Komendy
+## 🛠️ Komendy CLI
 
 ```bash
 # 1. Inicjalizacja nowego pliku package.json
 dpn init
 
-# 2. Dodanie nowej zależności do projektu
+# 2. Dodanie nowej zależności
 dpn add lodash
 dpn add express@latest
 
-# 3. Zainstalowanie wszystkich zależności z package.json
+# 3. Instalacja wszystkich zależności z package.json
 dpn install
-# lub w wersji skróconej
+# lub skrót
 dpn i
 
-# 4. Uruchomienie skryptu z package.json z dołączonym node_modules/.bin
+# 4. Automatyczna aktualizacja DPN do najnowszej wersji (OTA)
+dpn upgrade
+
+# 5. Uruchamianie skryptów z package.json
+dpn run <nazwa_skryptu>m node_modules/.bin
 dpn run <nazwa_skryptu>
 
 # 5. Pomoc i wersja
