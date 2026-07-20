@@ -5,8 +5,9 @@ import { ensurePackagesInStoreParallel } from './store.js';
 import { linkPackages } from './linker.js';
 import { runScript } from './runner.js';
 import { ProgressBar } from './ui.js';
+import { readLockfile, writeLockfile, reconstructTreeFromLockfile } from './lockfile.js';
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 
 async function handleInit(projectDir: string) {
   const pkgPath = path.join(projectDir, 'package.json');
@@ -28,14 +29,15 @@ async function handleInit(projectDir: string) {
     keywords: [],
     author: '',
     license: 'ISC',
-    dependencies: {}
+    dependencies: {},
+    devDependencies: {}
   };
 
   await fs.promises.writeFile(pkgPath, JSON.stringify(initialPkg, null, 2), 'utf-8');
   console.log(`[dpn] Utworzono plik package.json w ${projectDir}`);
 }
 
-async function handleInstall(projectDir: string) {
+async function handleInstall(projectDir: string, forceRefresh: boolean = false) {
   const pkgPath = path.join(projectDir, 'package.json');
   if (!fs.existsSync(pkgPath)) {
     throw new Error('Nie znaleziono pliku package.json. Użyj "dpn init" aby go utworzyć.');
@@ -54,83 +56,145 @@ async function handleInstall(projectDir: string) {
     return;
   }
 
-  console.log(`[dpn] Rozwiązywanie zależności dla ${depCount} pakietów nadrzędnych...`);
-  const { tree, rootResolved } = await resolveDependencies(rootDeps);
+  let tree;
+  let rootResolved;
+
+  const existingLock = !forceRefresh ? await readLockfile(projectDir) : null;
+  
+  // Sprawdzamy czy możemy użyć pliku lockfile (jeśli wszystkie główne zależności się zgadzają)
+  const isLockValid = existingLock && Object.keys(rootDeps).every(name => existingLock.rootResolved[name]);
+
+  if (isLockValid && existingLock) {
+    console.log('[dpn] Używanie pliku blokady (dpn-lock.json)...');
+    const reconstructed = reconstructTreeFromLockfile(existingLock);
+    tree = reconstructed.tree;
+    rootResolved = reconstructed.rootResolved;
+  } else {
+    console.log(`[dpn] Rozwiązywanie zależności dla ${depCount} pakietów nadrzędnych...`);
+    const resolved = await resolveDependencies(rootDeps);
+    tree = resolved.tree;
+    rootResolved = resolved.rootResolved;
+
+    // Zapisujemy nowy plik lockfile
+    await writeLockfile(projectDir, tree, rootResolved);
+  }
 
   const packages = Array.from(tree.values());
   console.log(`[dpn] Znaleziono łącznie ${packages.length} unikalnych pakietów (z pod-zależnościami).\n`);
 
   const progressBar = new ProgressBar(packages.length);
 
-  // Pobieramy i rozpakowujemy pakiety równolegle (pula 10 połączeń) z wizualizacją w czasie rzeczywistym
   await ensurePackagesInStoreParallel(packages, 10, (completed, total, pkg) => {
     progressBar.update(completed, `Pobieranie ${pkg.name}@${pkg.version}`);
   });
 
   progressBar.finish();
 
-  // Tworzymy dowiązania (symlinks) w lokalnym node_modules
   await linkPackages(tree, rootResolved, projectDir);
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-  console.log(`\n✨ [dpn] Sukces! Zainstalowano i połączono ${packages.length} pakietów w ${duration}s.`);
+  console.log(`✨ [dpn] Sukces! Zainstalowano i połączono ${packages.length} pakietów w ${duration}s.`);
 }
 
-async function handleAdd(pkgSpec: string, projectDir: string) {
+async function handleAdd(args: string[], projectDir: string) {
+  const isDev = args.includes('-D') || args.includes('--save-dev');
+  const pkgSpecs = args.filter(a => a !== '-D' && a !== '--save-dev' && !a.startsWith('-'));
+
+  if (pkgSpecs.length === 0) {
+    console.error('Błąd: Podaj nazwę pakietu (np. dpn add lodash lub dpn add -D typescript)');
+    process.exit(1);
+  }
+
   const pkgPath = path.join(projectDir, 'package.json');
   if (!fs.existsSync(pkgPath)) {
     await handleInit(projectDir);
   }
 
-  let name = pkgSpec;
-  let range = 'latest';
-
-  if (pkgSpec.startsWith('@')) {
-    const lastIdx = pkgSpec.lastIndexOf('@');
-    if (lastIdx > 0) {
-      name = pkgSpec.slice(0, lastIdx);
-      range = pkgSpec.slice(lastIdx + 1);
-    }
-  } else if (pkgSpec.includes('@')) {
-    const parts = pkgSpec.split('@');
-    name = parts[0];
-    range = parts[1];
-  }
-
-  console.log(`[dpn] Dodawanie pakietu ${name}@${range} do package.json...`);
-
   const pkgJson = JSON.parse(await fs.promises.readFile(pkgPath, 'utf-8'));
-  if (!pkgJson.dependencies) {
-    pkgJson.dependencies = {};
+  const section = isDev ? 'devDependencies' : 'dependencies';
+  if (!pkgJson[section]) {
+    pkgJson[section] = {};
   }
 
-  pkgJson.dependencies[name] = range.startsWith('^') || range.startsWith('~') || range === 'latest' ? `^${range === 'latest' ? '0.0.0' : range.replace(/[\^~]/, '')}` : range;
+  for (const pkgSpec of pkgSpecs) {
+    let name = pkgSpec;
+    let range = 'latest';
 
-  const { rootResolved } = await resolveDependencies({ [name]: range });
-  if (rootResolved[name]) {
-    pkgJson.dependencies[name] = `^${rootResolved[name]}`;
+    if (pkgSpec.startsWith('@')) {
+      const lastIdx = pkgSpec.lastIndexOf('@');
+      if (lastIdx > 0) {
+        name = pkgSpec.slice(0, lastIdx);
+        range = pkgSpec.slice(lastIdx + 1);
+      }
+    } else if (pkgSpec.includes('@')) {
+      const parts = pkgSpec.split('@');
+      name = parts[0];
+      range = parts[1];
+    }
+
+    console.log(`[dpn] Dodawanie pakietu ${name}@${range} do ${section}...`);
+    const { rootResolved } = await resolveDependencies({ [name]: range });
+    const resolvedVersion = rootResolved[name] || range;
+    pkgJson[section][name] = `^${resolvedVersion.replace(/[\^~]/, '')}`;
   }
 
   await fs.promises.writeFile(pkgPath, JSON.stringify(pkgJson, null, 2), 'utf-8');
 
-  await handleInstall(projectDir);
+  // Po dodaniu nowej paczki odświeżamy lockfile i instalujemy
+  await handleInstall(projectDir, true);
+}
+
+async function handleRemove(pkgNames: string[], projectDir: string) {
+  const pkgPath = path.join(projectDir, 'package.json');
+  if (!fs.existsSync(pkgPath)) {
+    throw new Error('Nie znaleziono pliku package.json w tym katalogu.');
+  }
+
+  if (pkgNames.length === 0) {
+    console.error('Błąd: Podaj nazwę pakietu do usunięcia (np. dpn remove lodash)');
+    process.exit(1);
+  }
+
+  const pkgJson = JSON.parse(await fs.promises.readFile(pkgPath, 'utf-8'));
+
+  for (const name of pkgNames) {
+    console.log(`[dpn] Usuwanie pakietu ${name}...`);
+    if (pkgJson.dependencies) {
+      delete pkgJson.dependencies[name];
+    }
+    if (pkgJson.devDependencies) {
+      delete pkgJson.devDependencies[name];
+    }
+
+    // Usuwamy folder z node_modules
+    const targetNmDir = path.join(projectDir, 'node_modules', name);
+    if (fs.existsSync(targetNmDir)) {
+      await fs.promises.rm(targetNmDir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+
+  await fs.promises.writeFile(pkgPath, JSON.stringify(pkgJson, null, 2), 'utf-8');
+
+  // Przeinstalowujemy pozostałe zależności
+  await handleInstall(projectDir, true);
 }
 
 function showHelp() {
   console.log(`
 🚀 dpn (Direct Package Node) v${VERSION}
-Autorski menedżer pakietów z obsługą dowiązań (symlinks) i globalnego store.
+Autorski menedżer pakietów z obsługą dowiązań (symlinks), lockfile i globalnego store.
 
 Użycie:
   dpn <command> [options]
 
 Dostępne komendy:
-  init               Tworzy nowy plik package.json
-  install, i         Instaluje wszystkie zależności z package.json
-  add <package>      Dodaje i instaluje pakiet (np. dpn add lodash)
-  run <script>       Uruchamia skrypt zdefiniowany w package.json
-  -v, --version      Wyświetla wersję dpn
-  -h, --help         Wyświetla tę pomoc
+  init                     Tworzy nowy plik package.json
+  install, i               Instaluje wszystkie zależności z package.json (używając dpn-lock.json)
+  add <pkg> [-D]           Dodaje pakiet do dependencies (lub devDependencies z flagą -D)
+  remove, rm <pkg>         Usuwa pakiet z projektu
+  run <script>             Uruchamia skrypt zdefiniowany w package.json
+  -v, --version            Wyświetla wersję dpn
+  -h, --help               Wyświetla tę pomoc
 `);
 }
 
@@ -149,11 +213,11 @@ export async function main() {
         await handleInstall(cwd);
         break;
       case 'add':
-        if (!args[1]) {
-          console.error('Błąd: Podaj nazwę pakietu (np. dpn add lodash)');
-          process.exit(1);
-        }
-        await handleAdd(args[1], cwd);
+        await handleAdd(args.slice(1), cwd);
+        break;
+      case 'remove':
+      case 'rm':
+        await handleRemove(args.slice(1), cwd);
         break;
       case 'run':
         if (!args[1]) {
