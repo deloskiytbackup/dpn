@@ -13,6 +13,21 @@ DPN eliminates duplicate disk storage and speeds up package re-installs by up to
 
 ---
 
+## 📊 Package Manager Comparison: npm vs pnpm vs bun vs DPN
+
+| Feature / Metric | npm | pnpm | bun | DPN (Ours) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Architecture** | Flat `node_modules` | Symlink CAS Store | Global Cache | **Symlink CAS Store** |
+| **Disk Space Efficiency** | 🔴 Low (Copies) | 🟢 Very High | 🟡 Medium | **🟢 Very High** |
+| **Parallel Downloads** | 🟡 Medium | 🟢 Very Fast | 🟢 Ultra Fast | **🟢 Super Fast (10 Pool)** |
+| **Ghost Dependencies** | ❌ Allowed | ✅ Blocked | ❌ Allowed | **✅ Blocked** |
+| **Windows Compatibility**| 🟡 Medium | 🟡 Junction issues | 🔴 Poor | **🟢 100% Native (.cmd/.ps1)** |
+| **Over-The-Air (OTA)** | ❌ No | ❌ No | ❌ No | **✅ Built-in (`dpn upgrade`)** |
+| **Lockfile Standard** | `package-lock.json` | `pnpm-lock.yaml` | `bun.lockb` | **`dpn-lock.json`** |
+| **CLI Progress Bar** | 🟡 Basic | 🟢 Detailed | 🟢 Fast | **🟢 Animated ANSI Bar** |
+
+---
+
 ## ✨ Key Features
 
 - 🔄 **Over-The-Air (OTA) Updates (v1.3.0)**: Built-in self-updater (`dpn upgrade`) that automatically fetches, builds, and re-links the latest version directly from GitHub!

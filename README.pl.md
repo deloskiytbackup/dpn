@@ -13,6 +13,21 @@ Menedżer zapobiega duplikowaniu plików na dysku i przyspiesza reinstalację pa
 
 ---
 
+## 📊 Porównanie Menedżerów Pakietów: npm vs pnpm vs bun vs DPN
+
+| Cecha / Metryka | npm | pnpm | bun | DPN (Ours) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Architektura** | Płaskie `node_modules` | Symlink CAS Store | Globalny Cache | **Symlink CAS Store** |
+| **Oszczędność Dysku** | 🔴 Niska (Kopie) | 🟢 Bardzo Wysoka | 🟡 Średnia | **🟢 Bardzo Wysoka** |
+| **Równoległe Pobieranie** | 🟡 Średnie | 🟢 Bardzo Szybkie | 🟢 Ekstremalne | **🟢 Super Szybkie (Pula 10)** |
+| **Wycieki Zależności (Ghost)**| ❌ Występują | ✅ Blokowane | ❌ Występują | **✅ Blokowane** |
+| **Zgodność z Windows** | 🟡 Średnia | 🟡 Problemy | 🔴 Słaba | **🟢 100% Pełna Native** |
+| **Aktualizacje OTA** | ❌ Brak | ❌ Brak | ❌ Brak | **✅ Wbudowane (`dpn upgrade`)** |
+| **Standard Lockfile** | `package-lock.json` | `pnpm-lock.yaml` | `bun.lockb` | **`dpn-lock.json`** |
+| **Pasek Postępu Progress** | 🟡 Prosty | 🟢 Złożony | 🟢 Szybki | **🟢 Dedykowany ANSI** |
+
+---
+
 ## ✨ Kluczowe Cechy
 
 - 🔄 **Aktualizacje Over-The-Air (OTA) (v1.3.0)**: Wbudowany mechanizm samo-aktualizacji (`dpn upgrade`), który automatycznie pobiera, kompiluje i aktualizuje dpn prosto z GitHuba!

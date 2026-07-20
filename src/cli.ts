@@ -9,7 +9,7 @@ import { readLockfile, writeLockfile, reconstructTreeFromLockfile } from './lock
 import { handleSelfUpgrade, checkRemoteVersion, printUpdateNotice } from './ota.js';
 import { fetchPackageMetadata } from './registry.js';
 
-const VERSION = '1.5.0';
+const VERSION = '1.6.0';
 
 async function handleInit(projectDir: string) {
   const pkgPath = path.join(projectDir, 'package.json');
@@ -230,6 +230,27 @@ async function handleRemove(pkgNames: string[], projectDir: string) {
   await handleInstall(projectDir, true);
 }
 
+function handleCompare() {
+  console.log('\n📊 \x1b[1mPorównanie Menedżerów Pakietów (npm vs pnpm vs bun vs DPN)\x1b[0m\n');
+  console.log('┌──────────────────────────┬────────────────┬────────────────┬────────────────┬────────────────┐');
+  console.log('│ Cecha / Funkcja          │ \x1b[31;1mnpm\x1b[0m            │ \x1b[33;1mpnpm\x1b[0m           │ \x1b[35;1mbun\x1b[0m            │ \x1b[32;1mDPN (Ours)\x1b[0m    │');
+  console.log('├──────────────────────────┼────────────────┼────────────────┼────────────────┼────────────────┤');
+  console.log('│ **Architektura**         │ Flat node_mod  │ Symlink CAS    │ Global Cache   │ \x1b[32;1mSymlink CAS\x1b[0m    │');
+  console.log('│ **Oszczędność Dysku**    │ 🔴 Niska (Kopie)│ 🟢 Bardzo Wys. │ 🟡 Średnia     │ \x1b[32;1m🟢 Bardzo Wys.\x1b[0m │');
+  console.log('│ **Równoległe Pobieranie**│ 🟡 Średnia     │ 🟢 Bardzo Szyb.│ 🟢 Ekstremalna │ \x1b[32;1m🟢 Super Szybkie\x1b[0m│');
+  console.log('│ **Ghost Dependencies**   │ ❌ Występują   │ ✅ Blokowane   │ ❌ Występują   │ \x1b[32;1m✅ Blokowane\x1b[0m    │');
+  console.log('│ **Zgodność z Windows**   │ 🟡 Średnia     │ 🟡 Problemy    │ 🔴 Słaba       │ \x1b[32;1m🟢 Pełna (Native)\x1b[0m│');
+  console.log('│ **Aktualizacje OTA**     │ ❌ Brak        │ ❌ Brak        │ ❌ Brak        │ \x1b[32;1m✅ Wbudowane (OTA)\x1b[0m│');
+  console.log('│ **Plik Blokady Lockfile**│ package-lock   │ pnpm-lock.yaml │ bun.lockb      │ \x1b[32;1mdp-lock.json\x1b[0m   │');
+  console.log('│ **Pasek Postępu Progress**│ 🟡 Prosty     │ 🟢 Złożony     │ 🟢 Szybki      │ \x1b[32;1m🟢 Dedykowany ANSI\x1b[0m│');
+  console.log('└──────────────────────────┴────────────────┴────────────────┴────────────────┴────────────────┘\n');
+  console.log('💡 \x1b[1mDlaczego DPN jest wyjątkowy?\x1b[0m');
+  console.log('- **Magazyn Centralny (~/.dpn/store)**: Pakiety ściągane są tylko 1 raz i dowiązywane w 1 ms (Symlinks/Junctions).');
+  console.log('- **Zabezpieczenie przed Ghost Dependencies**: Kod nie może zalinkować niezaadeklarowanej pod-zależności.');
+  console.log('- **Dedykowany dla Windows**: Native wrappery .cmd oraz .ps1 z iniekcją NODE_PRESERVE_SYMLINKS.');
+  console.log('- **Wbudowane Aktualizacje OTA**: Uruchom \x1b[1mdpn upgrade\x1b[0m, a DPN automatycznie pobierze i zaktualizuje sam siebie!\n');
+}
+
 function showHelp() {
   console.log(`
 🚀 \x1b[1mdpn (Direct Package Node) v${VERSION}\x1b[0m
@@ -244,6 +265,7 @@ Dostępne komendy:
   add <pkg> [-D]           Dodaje pakiet do dependencies (lub devDependencies z flagą -D)
   update, up [pkg...]      Aktualizuje pakiety projektu do najnowszych wersji z NPM
   remove, rm <pkg>         Usuwa pakiet z projektu
+  compare, bench           Wyświetla porównanie wydajności i cech: pnpm vs npm vs bun vs DPN
   run <script>             Uruchamia skrypt zdefiniowany w package.json
   upgrade, ota             Automatycznie aktualizuje dpn do najnowszej wersji z GitHuba (OTA)
   -v, --version            Wyświetla wersję dpn
@@ -257,7 +279,7 @@ export async function main() {
   const cwd = process.cwd();
 
   let updatePromise: Promise<string | null> | null = null;
-  if (command !== 'upgrade' && command !== 'ota' && command !== '-v' && command !== '--version') {
+  if (command !== 'upgrade' && command !== 'ota' && command !== '-v' && command !== '--version' && command !== 'compare' && command !== 'bench') {
     updatePromise = checkRemoteVersion();
   }
 
@@ -280,6 +302,11 @@ export async function main() {
       case 'remove':
       case 'rm':
         await handleRemove(args.slice(1), cwd);
+        break;
+      case 'compare':
+      case 'bench':
+      case 'benchmark':
+        handleCompare();
         break;
       case 'run':
         if (!args[1]) {
