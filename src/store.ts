@@ -15,7 +15,7 @@ export function getStoreDir(): string {
 
 export function getPackageStorePath(name: string, version: string): string {
   const safeName = name.replace(/\//g, '+');
-  return path.join(STORE_DIR, `${safeName}@${version}`);
+  return path.join(STORE_DIR, `${safeName}@${version}`, 'node_modules', name);
 }
 
 export interface ProgressState {
