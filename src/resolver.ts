@@ -37,6 +37,11 @@ export async function resolveDependencies(
     }
 
     if (!targetVersion) {
+      const cleanRange = range.replace(/[\^~=]/g, '').trim();
+      targetVersion = semver.maxSatisfying(availableVersions, cleanRange);
+    }
+
+    if (!targetVersion) {
       targetVersion = metadata['dist-tags']?.['latest'] || availableVersions[availableVersions.length - 1];
     }
 
@@ -60,21 +65,15 @@ export async function resolveDependencies(
     const rawDeps = versionData.dependencies || {};
     const resolvedDeps: Record<string, string> = {};
 
-    const depEntries = Object.entries(rawDeps);
-    if (depEntries.length > 0) {
-      const resolvedList = await Promise.all(
-        depEntries.map(async ([depName, depRange]) => {
-          const resolvedDepVersion = await resolvePackage(depName, depRange);
-          return { depName, resolvedDepVersion };
-        })
-      );
-      for (const { depName, resolvedDepVersion } of resolvedList) {
-        resolvedDeps[depName] = resolvedDepVersion;
-      }
-    }
+    const depPromises = Object.entries(rawDeps).map(async ([depName, depRange]) => {
+      const depVer = await resolvePackage(depName, depRange);
+      resolvedDeps[depName] = depVer;
+    });
+
+    await Promise.all(depPromises);
 
     tree.set(key, {
-      name,
+      name: versionData.name || name,
       version: targetVersion,
       tarballUrl: versionData.dist.tarball,
       dependencies: resolvedDeps,
@@ -86,17 +85,12 @@ export async function resolveDependencies(
     return targetVersion;
   }
 
-  const rootEntries = Object.entries(rootDependencies);
-  const rootResolvedList = await Promise.all(
-    rootEntries.map(async ([name, range]) => {
-      const resolvedVersion = await resolvePackage(name, range);
-      return { name, resolvedVersion };
-    })
-  );
+  const rootPromises = Object.entries(rootDependencies).map(async ([name, range]) => {
+    const ver = await resolvePackage(name, range);
+    rootResolved[name] = ver;
+  });
 
-  for (const { name, resolvedVersion } of rootResolvedList) {
-    rootResolved[name] = resolvedVersion;
-  }
+  await Promise.all(rootPromises);
 
   return { tree, rootResolved };
 }

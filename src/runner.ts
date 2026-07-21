@@ -20,7 +20,11 @@ export async function runScript(scriptName: string, projectDir: string): Promise
   const binDir = path.resolve(projectDir, 'node_modules', '.bin');
   const nodeBinDir = path.dirname(process.execPath);
 
-  const env: Record<string, string | undefined> = { ...process.env, NODE_PRESERVE_SYMLINKS: '1' };
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    NODE_PRESERVE_SYMLINKS: '1',
+    NEXT_DISABLE_PACKAGE_INSTALL: '1'
+  };
   
   const pathKey = Object.keys(env).find(k => k.toLowerCase() === 'path') || 'PATH';
   const existingPath = env[pathKey] || '';

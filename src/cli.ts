@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import semver from 'semver';
 import { resolveDependencies } from './resolver.js';
 import { ensurePackagesInStoreParallel } from './store.js';
 import { linkPackages } from './linker.js';
@@ -9,7 +10,7 @@ import { readLockfile, writeLockfile, reconstructTreeFromLockfile } from './lock
 import { handleSelfUpgrade, checkRemoteVersion, printUpdateNotice } from './ota.js';
 import { fetchPackageMetadata } from './registry.js';
 
-const VERSION = '2.5.0';
+const VERSION = '2.6.0';
 
 async function handleInit(projectDir: string) {
   const pkgPath = path.join(projectDir, 'package.json');
@@ -208,13 +209,29 @@ async function handleUpdate(targetPkgs: string[], projectDir: string) {
       updateSpinner.updateText(`Sprawdzanie najnowszej wersji dla \x1b[1m${name}\x1b[0m...`);
       const meta = await fetchPackageMetadata(name);
       const latestVersion = meta['dist-tags']?.latest;
-      if (!latestVersion) continue;
-
       const isDev = !!devDeps[name];
       const section = isDev ? 'devDependencies' : 'dependencies';
       const currentSpec = pkgJson[section]?.[name] || '';
+      const currentVersion = currentSpec.replace(/[\^~=]/g, '').trim();
 
-      const newSpec = `^${latestVersion}`;
+      const allowMajor = process.argv.includes('--latest') || process.argv.includes('--major') || process.argv.includes('-L');
+      let targetVersion = latestVersion;
+
+      const availableVersions = Object.keys(meta.versions || {});
+
+      if (!allowMajor && semver.valid(currentVersion) && semver.valid(latestVersion)) {
+        const currentMajor = semver.major(currentVersion);
+        const latestMajor = semver.major(latestVersion);
+
+        if (latestMajor > currentMajor) {
+          const compatibleInMajor = availableVersions.filter(v => semver.valid(v) && semver.major(v) === currentMajor);
+          if (compatibleInMajor.length > 0) {
+            targetVersion = compatibleInMajor.sort(semver.rcompare)[0];
+          }
+        }
+      }
+
+      const newSpec = `^${targetVersion}`;
 
       if (currentSpec !== newSpec) {
         updateSpinner.stop();
