@@ -44,43 +44,37 @@ export async function linkPackages(
   // 1. Virtual store + powiązanie zależności wewnątrz store
   for (const [key, pkg] of tree.entries()) {
     const storePath = getPackageStorePath(pkg.name, pkg.version);
+
+    // Samo-dowiązanie pakietu wewnątrz store: store/pkg@ver/node_modules/pkg -> store/pkg@ver
+    // Gwarantuje to, że rodzicem ścieżki jest zawsze folder node_modules dla kompilatorów SWC / Webpacka
+    const storeSelfLink = path.join(storePath, 'node_modules', pkg.name);
+    createSymlink(storePath, storeSelfLink, true);
+
     const virtualPkgDir = path.join(virtualStoreDir, key, 'node_modules', pkg.name);
-
-    createSymlink(storePath, virtualPkgDir, true);
-
-    // Linkujemy pod-zależności bezpośrednio wewnątrz store/<pkg>/<ver>/node_modules
-    const storeNodeModules = path.join(storePath, 'node_modules');
-
-    // Samo-dowiązanie pakietu do samego siebie (np. next -> next) aby require('next/...') działało w nim bezbłędnie
-    const selfStoreLinkPath = path.join(storeNodeModules, pkg.name);
-    createSymlink(storePath, selfStoreLinkPath, true);
+    createSymlink(storeSelfLink, virtualPkgDir, true);
 
     for (const [depName, depVersion] of Object.entries(pkg.dependencies)) {
       const depStorePath = getPackageStorePath(depName, depVersion);
-      
+      const depStoreSelfLink = path.join(depStorePath, 'node_modules', depName);
+
       // Dowiązanie w virtualStore
-      const depVirtualDir = path.join(virtualStoreDir, `${depName}@${depVersion}`, 'node_modules', depName);
       const depVirtualLinkPath = path.join(virtualStoreDir, key, 'node_modules', depName);
-      createSymlink(depVirtualDir, depVirtualLinkPath, true);
+      createSymlink(depStoreSelfLink, depVirtualLinkPath, true);
 
       // Dowiązanie wewnątrz store izolowanym
-      const depStoreLinkPath = path.join(storeNodeModules, depName);
-      createSymlink(depStorePath, depStoreLinkPath, true);
+      const depStoreLinkPath = path.join(storePath, 'node_modules', depName);
+      createSymlink(depStoreSelfLink, depStoreLinkPath, true);
     }
   }
 
   // 2. Root dependencies
   for (const [rootDepName, rootVersion] of Object.entries(rootResolved)) {
     const key = `${rootDepName}@${rootVersion}`;
-    const virtualPkgDir = path.join(virtualStoreDir, key, 'node_modules', rootDepName);
+    const storePath = getPackageStorePath(rootDepName, rootVersion);
+    const storeSelfLink = path.join(storePath, 'node_modules', rootDepName);
     const rootLinkPath = path.join(nodeModulesDir, rootDepName);
 
-    if (fs.existsSync(virtualPkgDir)) {
-      createSymlink(virtualPkgDir, rootLinkPath, true);
-    } else {
-      const storePath = getPackageStorePath(rootDepName, rootVersion);
-      createSymlink(storePath, rootLinkPath, true);
-    }
+    createSymlink(storeSelfLink, rootLinkPath, true);
 
     const pkg = tree.get(key);
     if (pkg && pkg.bin) {
