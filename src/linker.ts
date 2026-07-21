@@ -57,16 +57,17 @@ export async function linkPackages(
       ? path.dirname(path.dirname(storePath))
       : path.dirname(storePath);
 
-    for (const [depName, depVersion] of Object.entries(pkg.dependencies)) {
-      const depStorePath = getPackageStorePath(depName, depVersion);
+    // Podłączamy wszystkie wyliczone pakiety w drzewie zależności jako dowiązania wewnątrz storeNodeModulesDir oraz virtualStoreDir
+    for (const [, otherPkg] of tree.entries()) {
+      if (otherPkg.name === pkg.name) continue;
 
-      // Dowiązanie w virtualStore (.dpn/key/node_modules/depName)
-      const depVirtualLinkPath = path.join(virtualStoreDir, key, 'node_modules', depName);
-      createSymlink(depStorePath, depVirtualLinkPath, true);
+      const otherStorePath = getPackageStorePath(otherPkg.name, otherPkg.version);
 
-      // Dowiązanie wewnątrz magazynu (store/key/node_modules/depName)
-      const depStoreLinkPath = path.join(storeNodeModulesDir, depName);
-      createSymlink(depStorePath, depStoreLinkPath, true);
+      const depVirtualLinkPath = path.join(virtualStoreDir, key, 'node_modules', otherPkg.name);
+      createSymlink(otherStorePath, depVirtualLinkPath, true);
+
+      const depStoreLinkPath = path.join(storeNodeModulesDir, otherPkg.name);
+      createSymlink(otherStorePath, depStoreLinkPath, true);
     }
   }
 
