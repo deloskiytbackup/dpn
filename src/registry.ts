@@ -9,6 +9,7 @@ export interface NpmPackageVersion {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
   dist: {
     tarball: string;
     shasum?: string;

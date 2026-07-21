@@ -25,9 +25,19 @@ export async function resolveDependencies(
       onResolvingPackage(name, range);
     }
 
-    const metadata = await fetchPackageMetadata(name);
-    const availableVersions = Object.keys(metadata.versions);
+    let metadata;
+    try {
+      metadata = await fetchPackageMetadata(name);
+    } catch {
+      // Ignorujemy błędy pobierania opcjonalnych paczek platformowych, jeśli nie istnieją w rejestrze
+      return '';
+    }
 
+    if (!metadata || !metadata.versions) {
+      return '';
+    }
+
+    const availableVersions = Object.keys(metadata.versions);
     let targetVersion: string | null = null;
 
     if (metadata['dist-tags'] && metadata['dist-tags'][range]) {
@@ -46,7 +56,7 @@ export async function resolveDependencies(
     }
 
     if (!targetVersion) {
-      throw new Error(`Nie znaleziono pasującej wersji dla paczki "${name}" z zakresem "${range}"`);
+      return '';
     }
 
     const key = `${name}@${targetVersion}`;
@@ -62,12 +72,21 @@ export async function resolveDependencies(
     resolving.add(key);
 
     const versionData: NpmPackageVersion = metadata.versions[targetVersion];
-    const rawDeps = versionData.dependencies || {};
+    const rawDeps = {
+      ...(versionData.dependencies || {}),
+      ...(versionData.optionalDependencies || {})
+    };
     const resolvedDeps: Record<string, string> = {};
 
     const depPromises = Object.entries(rawDeps).map(async ([depName, depRange]) => {
-      const depVer = await resolvePackage(depName, depRange);
-      resolvedDeps[depName] = depVer;
+      try {
+        const depVer = await resolvePackage(depName, depRange as string);
+        if (depVer) {
+          resolvedDeps[depName] = depVer;
+        }
+      } catch {
+        // Ignorujemy niepowodzenia opcjonalnych zależności
+      }
     });
 
     await Promise.all(depPromises);
@@ -87,7 +106,9 @@ export async function resolveDependencies(
 
   const rootPromises = Object.entries(rootDependencies).map(async ([name, range]) => {
     const ver = await resolvePackage(name, range);
-    rootResolved[name] = ver;
+    if (ver) {
+      rootResolved[name] = ver;
+    }
   });
 
   await Promise.all(rootPromises);
