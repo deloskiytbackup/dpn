@@ -51,6 +51,10 @@ export async function linkPackages(
     // Linkujemy pod-zależności bezpośrednio wewnątrz store/<pkg>/<ver>/node_modules
     const storeNodeModules = path.join(storePath, 'node_modules');
 
+    // Samo-dowiązanie pakietu do samego siebie (np. next -> next) aby require('next/...') działało w nim bezbłędnie
+    const selfStoreLinkPath = path.join(storeNodeModules, pkg.name);
+    createSymlink(storePath, selfStoreLinkPath, true);
+
     for (const [depName, depVersion] of Object.entries(pkg.dependencies)) {
       const depStorePath = getPackageStorePath(depName, depVersion);
       
@@ -80,12 +84,12 @@ export async function linkPackages(
 
     const pkg = tree.get(key);
     if (pkg && pkg.bin) {
-      setupBinaries(pkg, rootLinkPath, binDir);
+      setupBinaries(pkg, rootLinkPath, binDir, nodeModulesDir);
     }
   }
 }
 
-function setupBinaries(pkg: ResolvedPackage, pkgInstalledDir: string, binDir: string) {
+function setupBinaries(pkg: ResolvedPackage, pkgInstalledDir: string, binDir: string, nodeModulesDir: string) {
   const bins: Record<string, string> = {};
 
   if (typeof pkg.bin === 'string') {
@@ -103,8 +107,8 @@ function setupBinaries(pkg: ResolvedPackage, pkgInstalledDir: string, binDir: st
       const cmdPath = path.join(binDir, `${binName}.cmd`);
       const ps1Path = path.join(binDir, `${binName}.ps1`);
 
-      const cmdContent = `@IF EXIST "%~dp0\\node.exe" (\n  "%~dp0\\node.exe"  "${targetBinFile}" %*\n) ELSE (\n  @SETLOCAL\n  "${nodeExe}"  "${targetBinFile}" %*\n)\n`;
-      const ps1Content = `#!/usr/bin/env pwsh\n& "${nodeExe}" "${targetBinFile}" $args\n`;
+      const cmdContent = `@IF EXIST "%~dp0\\node.exe" (\n  "%~dp0\\node.exe" "${targetBinFile}" %*\n) ELSE (\n  @SETLOCAL\n  @SET "NODE_PATH=${nodeModulesDir};%NODE_PATH%"\n  "${nodeExe}" "${targetBinFile}" %*\n)\n`;
+      const ps1Content = `#!/usr/bin/env pwsh\n$env:NODE_PATH="${nodeModulesDir};$env:NODE_PATH"\n& "${nodeExe}" "${targetBinFile}" $args\n`;
 
       fs.writeFileSync(cmdPath, cmdContent, 'utf-8');
       fs.writeFileSync(ps1Path, ps1Content, 'utf-8');
