@@ -17,12 +17,14 @@ export async function runScript(scriptName: string, projectDir: string): Promise
     throw new Error(`Brak skryptu "${scriptName}" w sekcji scripts w package.json.`);
   }
 
-  const binDir = path.resolve(projectDir, 'node_modules', '.bin');
+  const nodeModulesDir = path.resolve(projectDir, 'node_modules');
+  const binDir = path.resolve(nodeModulesDir, '.bin');
   const nodeBinDir = path.dirname(process.execPath);
 
+  const existingNodePath = process.env.NODE_PATH || '';
   const env: Record<string, string | undefined> = {
     ...process.env,
-    NODE_PRESERVE_SYMLINKS: '1',
+    NODE_PATH: existingNodePath ? `${nodeModulesDir}${path.delimiter}${existingNodePath}` : nodeModulesDir,
     NEXT_DISABLE_PACKAGE_INSTALL: '1'
   };
   

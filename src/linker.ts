@@ -4,12 +4,15 @@ import { getPackageStorePath } from './store.js';
 import { ResolvedPackage, ResolvedTree } from './resolver.js';
 
 function createSymlink(targetPath: string, linkPath: string, isDirectory: boolean) {
-  if (fs.existsSync(linkPath) || isSymlink(linkPath)) {
+  if (isSymlink(linkPath)) {
     try {
       fs.rmSync(linkPath, { recursive: true, force: true });
     } catch {
       // Ignorujemy błędy
     }
+  } else if (fs.existsSync(linkPath)) {
+    // Jeśli w miejscu linkPath znajduje się już zwykły katalog (np. wbudowane pakiety wewnątrz paczki), nie nadpisujemy go
+    return;
   }
 
   fs.mkdirSync(path.dirname(linkPath), { recursive: true });
