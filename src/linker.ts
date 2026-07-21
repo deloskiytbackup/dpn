@@ -45,36 +45,35 @@ export async function linkPackages(
   for (const [key, pkg] of tree.entries()) {
     const storePath = getPackageStorePath(pkg.name, pkg.version);
 
-    // Samo-dowiązanie pakietu wewnątrz store: store/pkg@ver/node_modules/pkg -> store/pkg@ver
-    // Gwarantuje to, że rodzicem ścieżki jest zawsze folder node_modules dla kompilatorów SWC / Webpacka
-    const storeSelfLink = path.join(storePath, 'node_modules', pkg.name);
-    createSymlink(storePath, storeSelfLink, true);
-
+    // Dowiązanie z node_modules/.dpn/key/node_modules/name -> store/key/node_modules/name
     const virtualPkgDir = path.join(virtualStoreDir, key, 'node_modules', pkg.name);
-    createSymlink(storeSelfLink, virtualPkgDir, true);
+    createSymlink(storePath, virtualPkgDir, true);
+
+    // Określamy wspólny katalog node_modules w magazynie dla pakietu (np. store/key/node_modules)
+    const storeNodeModulesDir = pkg.name.startsWith('@')
+      ? path.dirname(path.dirname(storePath))
+      : path.dirname(storePath);
 
     for (const [depName, depVersion] of Object.entries(pkg.dependencies)) {
       const depStorePath = getPackageStorePath(depName, depVersion);
-      const depStoreSelfLink = path.join(depStorePath, 'node_modules', depName);
 
-      // Dowiązanie w virtualStore
+      // Dowiązanie w virtualStore (.dpn/key/node_modules/depName)
       const depVirtualLinkPath = path.join(virtualStoreDir, key, 'node_modules', depName);
-      createSymlink(depStoreSelfLink, depVirtualLinkPath, true);
+      createSymlink(depStorePath, depVirtualLinkPath, true);
 
-      // Dowiązanie wewnątrz store izolowanym
-      const depStoreLinkPath = path.join(storePath, 'node_modules', depName);
-      createSymlink(depStoreSelfLink, depStoreLinkPath, true);
+      // Dowiązanie wewnątrz magazynu (store/key/node_modules/depName)
+      const depStoreLinkPath = path.join(storeNodeModulesDir, depName);
+      createSymlink(depStorePath, depStoreLinkPath, true);
     }
   }
 
-  // 2. Root dependencies
+  // 2. Root dependencies (node_modules/rootDep -> store/rootDep@ver/node_modules/rootDep)
   for (const [rootDepName, rootVersion] of Object.entries(rootResolved)) {
     const key = `${rootDepName}@${rootVersion}`;
     const storePath = getPackageStorePath(rootDepName, rootVersion);
-    const storeSelfLink = path.join(storePath, 'node_modules', rootDepName);
     const rootLinkPath = path.join(nodeModulesDir, rootDepName);
 
-    createSymlink(storeSelfLink, rootLinkPath, true);
+    createSymlink(storePath, rootLinkPath, true);
 
     const pkg = tree.get(key);
     if (pkg && pkg.bin) {
