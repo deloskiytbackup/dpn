@@ -10,7 +10,7 @@ import { readLockfile, writeLockfile, reconstructTreeFromLockfile } from './lock
 import { handleSelfUpgrade, checkRemoteVersion, printUpdateNotice } from './ota.js';
 import { fetchPackageMetadata } from './registry.js';
 
-const VERSION = '2.6.0';
+const VERSION = '2.7.0';
 
 async function handleInit(projectDir: string) {
   const pkgPath = path.join(projectDir, 'package.json');
@@ -90,7 +90,7 @@ async function handleInstall(projectDir: string, forceRefresh: boolean = false) 
   const progressBar = new ProgressBar(packages.length);
   let lastTotalBytes = 0;
 
-  await ensurePackagesInStoreParallel(packages, 16, (state) => {
+  await ensurePackagesInStoreParallel(packages, (state) => {
     lastTotalBytes = state.downloadedBytes;
     progressBar.update(
       state.completed,
